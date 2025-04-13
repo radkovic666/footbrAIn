@@ -49,7 +49,7 @@ fi
 echo -e "${YELLOW}[4/5] Unzipping files...${NC}"
 TOTAL_FILES=$(unzip -l "$ZIP_FILE" | tail -1 | awk '{print $2}')
 echo -e "    ${BLUE}Found $TOTAL_FILES files in archive${NC}"
-unzip -o "$ZIP_FILE" -d "$WORK_DIR" | awk -v total="$TOTAL_FILES" '
+unzip -o "$ZIP_FILE" -d "$WORK_DIR/models" | awk -v total="$TOTAL_FILES" '
     BEGIN { count=0 }
     /inflating/ { count++; printf "\r    Extracting... [%-50s] %d%%", substr("##################################################",1,count/total*50), (count/total*100) }
     END { printf "\n" }'
