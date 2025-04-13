@@ -39,9 +39,8 @@ def get_match_result(row):
         return 2  # Away Win
 games["position_diff"] = games["home_club_position"] - games["away_club_position"]
 games["age_diff"] = games["home_average_age"] - games["away_average_age"]
-games["foreigners_percentage"] = games["home_foreigners_percentage"] - games["away_foreigners_percentage"]
-
-
+games["nationals_diff"] = games["home_national_team_players"] - games["away_national_team_players"]
+games["seats_diff"] = games["home_stadium_seats"] - games["away_stadium_seats"]
 
 games["result"] = games.apply(get_match_result, axis=1)
 
@@ -55,14 +54,6 @@ def get_recent_form_ratio(club_id, match_date):
     recent = club_games[(club_games['club_id'] == club_id) & (club_games['date'] < match_date)]
     recent = recent.sort_values(by='date', ascending=False).head(5)
     return recent['is_win'].mean() if len(recent) > 0 else np.nan
-
-def get_coach_winrate(club_id, coach_name, match_date):
-    coach_games = club_games[
-        (club_games['club_id'] == club_id) &
-        (club_games['own_manager_name'] == coach_name) &
-        (club_games['date'] < match_date)
-    ]
-    return coach_games['is_win'].mean() if len(coach_games) > 0 else np.nan
 
 # === Caching ===
 CACHE_FILE = "/home/magilinux/footpredict/data/games_with_features.csv"
@@ -83,8 +74,6 @@ if not new_games.empty:
         return pd.Series({
             'home_recent_form': get_recent_form_ratio(row['home_club_id'], row['date']),
             'away_recent_form': get_recent_form_ratio(row['away_club_id'], row['date']),
-            'home_coach_winrate': get_coach_winrate(row['home_club_id'], row.get('home_manager_name', None), row['date']),
-            'away_coach_winrate': get_coach_winrate(row['away_club_id'], row.get('away_manager_name', None), row['date']),
         })
 
     print("⚙️  Extracting features...")
@@ -103,12 +92,13 @@ else:
 features = [
     'home_squad_size', 'away_squad_size',
     'home_average_age', 'away_average_age',
-    'home_club_position', 'away_club_position',
+    #'home_club_position', 'away_club_position',
     'home_national_team_players', 'away_national_team_players',
-    'foreigners_percentage', 'attendance',
+	'attendance',
     'home_recent_form', 'away_recent_form',
-    'home_coach_winrate', 'away_coach_winrate'
-    'position_diff','age_diff'
+    #'home_coach_winrate', 'away_coach_winrate',
+    'position_diff','age_diff','nationals_diff',
+    'seats_diff'
 ]
 
 # Drop missing values
@@ -141,10 +131,16 @@ os.makedirs("/home/magilinux/footpredict/models", exist_ok=True)
 joblib.dump(model, "/home/magilinux/footpredict/models/match_outcome_model.pkl")
 print("✅ Model saved to match_outcome_model.pkl")
 
-# Plot
+# Plot Feature Importance Graph
 plt.figure(figsize=(10,6))
 plt.title("Feature Importances")
 plt.bar(range(len(importances)), importances[np.argsort(importances)[::-1]], align="center")
 plt.xticks(range(len(importances)), [features[i] for i in np.argsort(importances)[::-1]], rotation=45)
 plt.tight_layout()
+plt.show()
+
+#Plot Confusion Matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+disp = ConfusionMatrixDisplay(conf_matrix, display_labels=["Home Win", "Draw", "Away Win"])
+disp.plot()
 plt.show()
