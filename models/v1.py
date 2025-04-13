@@ -19,7 +19,7 @@ conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
 # Load required tables
 games = pd.read_sql("SELECT * FROM games", conn)
 clubs = pd.read_sql("SELECT * FROM clubs", conn)
-events = pd.read_sql("SELECT * FROM game_events", conn)
+#events = pd.read_sql("SELECT * FROM game_events", conn)
 
 
 # Merge club data for home and away teams
@@ -39,6 +39,8 @@ def get_match_result(row):
         return 2
 games["position_diff"] = games["home_club_position"] - games["away_club_position"]
 games["age_diff"] = games["home_average_age"] - games["away_average_age"]
+games["seats_diff"] = games["home_stadium_seats"] - games["away_stadium_seats"]
+games["nationals_diff"] = games["home_national_team_players"] - games["away_national_team_players"]
 
 games["result"] = games.progress_apply(get_match_result, axis=1)
 
@@ -47,9 +49,8 @@ features = [
 	'home_squad_size', 'home_average_age',
 	'away_squad_size', 'away_average_age', 
     'home_club_position', 'away_club_position',
-    'attendance', 'away_national_team_players',
-    'home_national_team_players', 'position_diff',
-    'age_diff'
+    'attendance', 'position_diff',
+    'age_diff','nationals_diff'
 ]
 # Some positions are strings (e.g. "1st", "2nd"), convert to numeric if necessary
 for col in ['home_club_position', 'away_club_position']:
@@ -74,13 +75,14 @@ print(classification_report(y_test, y_pred, target_names=["Home Win", "Draw", "A
 
 # Save model
 os.makedirs("models", exist_ok=True)
-joblib.dump(model, "/home/magilinux/footpredict/models/match_outcome_model.pkl")
+joblib.dump(model, "/home/magilinux/footpredict/models/match_outcome_model_v1.pkl")
 print("✅ Model saved to models/match_outcome_model.pkl")
 
 conf_matrix = confusion_matrix(y_test, y_pred)
 disp = ConfusionMatrixDisplay(conf_matrix, display_labels=["Home Win", "Draw", "Away Win"])
 disp.plot()
-plt.show()
+plt.savefig("footpredict/models/v1_confusion_matrix.png")
+plt.close()
 
 # Get feature importances
 importances = model.feature_importances_
@@ -98,5 +100,6 @@ plt.title("Feature Importances")
 plt.bar(range(len(importances)), importances[indices], align="center")
 plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=45)
 plt.tight_layout()
-plt.show()
+plt.savefig("footpredict/models/v1_feature_importance.png")
+plt.close()
 
