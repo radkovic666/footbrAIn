@@ -9,8 +9,8 @@ from datetime import datetime
 
 # Get today's date and calculate the range
 current_date = pd.Timestamp.today().normalize()
-start_date = current_date - pd.Timedelta(days=7)
-end_date = current_date + pd.Timedelta(days=7)
+start_date = current_date - pd.Timedelta(days=14)
+end_date = current_date + pd.Timedelta(days=4)
 
 # Function to get the latest position for a team
 def get_latest_position(team_name):
@@ -80,7 +80,7 @@ class AutocompleteCombobox(ttk.Combobox):
 
 # Load models and database connection
 events_model = joblib.load('events_outcome_model.pkl')
-model = joblib.load("match_outcome_model.pkl")
+model = joblib.load("match_outcome_model_v1.pkl")
 with open('feature_names.json') as f:
     feature_order = json.load(f)
 conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
@@ -161,6 +161,7 @@ def predict_events(home_team, away_team, referee):
 # Load data
 clubs_df = pd.read_sql("SELECT * FROM clubs", conn)
 games_df = pd.read_sql("SELECT * FROM games", conn)
+player_valuations_df = pd.read_sql("SELECT * FROM player_valuations", conn)
 games_df['date'] = pd.to_datetime(games_df['date'])
 games_df['season'] = games_df['season'].astype(str)
 
@@ -203,7 +204,6 @@ venue_combo.pack()
 # Button Frame
 button_frame = ttk.Frame(root)
 button_frame.pack(pady=(10, 20))
-
 def predict():
     try:
         home_team = home_var.get()
@@ -222,35 +222,51 @@ def predict():
             messagebox.showerror("Error", "One or both teams not found.")
             return
 
+        home_id = home.iloc[0]['club_id']
+        away_id = away.iloc[0]['club_id']
+
         game_sample = games_df[
-            (games_df['home_club_id'] == home.iloc[0]['club_id']) &
-            (games_df['away_club_id'] == away.iloc[0]['club_id'])
+            (games_df['home_club_id'] == home_id) &
+            (games_df['away_club_id'] == away_id)
         ].sort_values('date', ascending=False)
 
-        #home_position = pd.to_numeric(game_sample.iloc[0]['home_club_position'], errors='coerce') if not game_sample.empty else np.nan
-        #away_position = pd.to_numeric(game_sample.iloc[0]['away_club_position'], errors='coerce') if not game_sample.empty else np.nan
         home_position = get_latest_position(home_team)
         away_position = get_latest_position(away_team)
         position_diff = home_position - away_position if not np.isnan(home_position) and not np.isnan(away_position) else 0
         attendance = home.iloc[0]['stadium_seats'] if venue != "Unknown" else 35000
         seats_diff = home.iloc[0]['stadium_seats'] - away.iloc[0]['stadium_seats']
-        #position_diff = (home_position - away_position) if not np.isnan(home_position) and not np.isnan(away_position) else 0
         age_diff = home.iloc[0]['average_age'] - away.iloc[0]['average_age']
         nationals_diff = home.iloc[0]['national_team_players'] - away.iloc[0]['national_team_players']
 
+        # 🧮 Calculate team values from latest valuations
+        def get_team_value(club_id):
+            valuations = player_valuations_df[player_valuations_df["current_club_id"] == club_id]
+            latest_dates = valuations.groupby("player_id")["date"].idxmax()
+            latest_valuations = valuations.loc[latest_dates]
+            return latest_valuations["market_value_in_eur"].sum()
+
+        home_team_value = get_team_value(home_id)
+        away_team_value = get_team_value(away_id)
+
+        value_diff = home_team_value - away_team_value
+        
         X_input = pd.DataFrame([{
-            'home_squad_size': home.iloc[0]['squad_size'],
-            'home_average_age': home.iloc[0]['average_age'],
-            'away_squad_size': away.iloc[0]['squad_size'],
-            'away_average_age': away.iloc[0]['average_age'],
-            'home_club_position': home_position,
-            'away_club_position': away_position,
-            'attendance': attendance,
-            'position_diff': position_diff,
-            'age_diff': age_diff,
-            'nationals_diff': nationals_diff,
-            'seats_diff': seats_diff
+        'home_squad_size': home.iloc[0]['squad_size'],
+        'home_average_age': home.iloc[0]['average_age'],
+        'away_squad_size': away.iloc[0]['squad_size'],
+        'away_average_age': away.iloc[0]['average_age'],
+        'home_club_position': home_position,
+        'away_club_position': away_position,
+        'attendance': attendance,
+        'position_diff': position_diff,
+        'age_diff': age_diff,
+        'nationals_diff': nationals_diff,
+        'seats_diff': seats_diff,
+        'total_value_home': home_team_value,
+        'total_value_away': away_team_value,
+        'value_diff': value_diff
         }])
+
 
         probs = model.predict_proba(X_input)[0]
         prediction = model.predict(X_input)[0]
