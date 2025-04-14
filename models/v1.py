@@ -75,7 +75,7 @@ print(classification_report(y_test, y_pred, target_names=["Home Win", "Draw", "A
 
 # Save model
 os.makedirs("models", exist_ok=True)
-joblib.dump(model, "/home/magilinux/footpredict/models/match_outcome_model.pkl")
+joblib.dump(model, "match_outcome_model.pkl")
 print("✅ Model saved to models/match_outcome_model.pkl")
 
 conf_matrix = confusion_matrix(y_test, y_pred)
