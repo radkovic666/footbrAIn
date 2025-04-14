@@ -87,7 +87,7 @@ print("🧪 Classification Report:\n")
 print(classification_report(y_test, y_pred))
 
 # === Save Model ===
-joblib.dump(clf, 'footpredict/models/events_outcome_model.pkl')
+joblib.dump(clf, 'events_outcome_model.pkl')
 print("✅ Model saved to models/events_outcome_model.pkl")
 
 # Get feature importances
@@ -106,7 +106,7 @@ plt.title("Feature Importances")
 plt.bar(range(len(importances)), importances[indices], align="center")
 plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=45)
 plt.tight_layout()
-plt.savefig("footpredict/models/events_outcome_feature_importance.png")
+plt.savefig("events_outcome_feature_importance.png")
 plt.close()
 
 # Confusion Matrix
@@ -118,5 +118,5 @@ plt.title("Confusion Matrix")
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.tight_layout()
-plt.savefig("footpredict/models/events_outcome_confusion_matrix.png")
+plt.savefig("events_outcome_confusion_matrix.png")
 plt.close()
