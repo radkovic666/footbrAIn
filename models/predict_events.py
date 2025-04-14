@@ -4,15 +4,20 @@ import argparse
 import pickle
 import joblib
 import numpy as np
+import json
 
 # Load the saved model
-model = joblib.load('footpredict/models/events_outcome_model.pkl')
+model = joblib.load('events_outcome_model.pkl')
+
+# Load feature names used during training
+with open('feature_names.json') as f:
+    feature_order = json.load(f)
 
 # === Connect to DB ===
 conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
 
 def get_avg_cards_per_referee(ref_name):
-    query = f"""
+    query = """
         SELECT COUNT(*) * 1.0 / COUNT(DISTINCT game_id) AS avg_cards
         FROM game_events
         WHERE type = 'Cards' AND game_id IN (
@@ -23,7 +28,7 @@ def get_avg_cards_per_referee(ref_name):
     return result['avg_cards'].iloc[0] if not result.empty and pd.notna(result['avg_cards'].iloc[0]) else 3.5
 
 def get_club_stats(club_name):
-    query = f"""
+    query = """
         SELECT
             AVG(attendance) AS avg_attendance,
             AVG(CASE WHEN home_club_name = ? THEN home_club_position
@@ -52,14 +57,17 @@ def predict_event(home_team, away_team, referee):
     away = get_club_stats(away_team)
     ref_cards = get_avg_cards_per_referee(referee)
 
-    features = pd.DataFrame([{
+    features_dict = {
         'attendance': (home['avg_attendance'] + away['avg_attendance']) / 2,
         'avg_cards_home': home['avg_cards'],
         'avg_cards_away': away['avg_cards'],
         'home_club_position': home['avg_position'],
         'away_club_position': away['avg_position'],
         'avg_cards_per_game_referee': ref_cards
-    }])
+    }
+
+    # Ensure correct column order
+    features = pd.DataFrame([features_dict])[feature_order]
 
     prediction = model.predict(features)[0]
     prob = model.predict_proba(features)[0][1]

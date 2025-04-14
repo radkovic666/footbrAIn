@@ -90,6 +90,12 @@ print(classification_report(y_test, y_pred))
 joblib.dump(clf, 'events_outcome_model.pkl')
 print("✅ Model saved to models/events_outcome_model.pkl")
 
+# Save the list of feature names
+import json
+with open('feature_names.json', 'w') as f:
+    json.dump(list(X.columns), f)
+
+
 # Get feature importances
 importances = clf.feature_importances_
 feature_names = X.columns
