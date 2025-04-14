@@ -1,3 +1,6 @@
+#python predict_events.py "Association Football Club Bournemouth" "Fulham Football Club" --ref "Michael Oliver"
+
+
 import sqlite3
 import pandas as pd
 import argparse
@@ -74,11 +77,23 @@ def predict_event(home_team, away_team, referee):
 
     print("\n📊 Feature Data Used:")
     print(features.T)
-
-    if prediction == 1:
-        print(f"\n🟨 High probability of card-heavy match: {prob * 100:.2f}%")
+    
+    # Interpret probability with rough mapping to card count
+    if prob < 0.4:
+        estimate = "🔵 Estimated: 1 card"
+    elif prob < 0.5:
+        estimate = "🔵 Estimated: 2 cards"
+    elif prob < 0.6:
+        estimate = "🟢 Estimated: 3 cards"
+    elif prob < 0.7:
+        estimate = "🟠 Estimated: 4 cards"
+    elif prob < 0.8:
+        estimate = "🔴 Estimated: 5 cards"
     else:
-        print(f"\n🟢 Low probability of card-heavy match: {prob * 100:.2f}%")
+        estimate = "🔴 Very likely 5+ cards"
+
+    print(f"\n📈 Prediction Probability: {prob * 100:.2f}%")
+    print(f"📌 Estimated Match Card Range: {estimate}")
 
 # === CLI Entry ===
 if __name__ == "__main__":
