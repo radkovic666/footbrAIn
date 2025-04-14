@@ -7,6 +7,40 @@ import numpy as np
 import json
 from datetime import datetime
 
+# Get today's date and calculate the range
+current_date = pd.Timestamp.today().normalize()
+start_date = current_date - pd.Timedelta(days=7)
+end_date = current_date + pd.Timedelta(days=7)
+
+# Function to get the latest position for a team
+def get_latest_position(team_name):
+    current_date = pd.Timestamp.today().normalize()
+    
+    # 1. Check games within ±7 days (excluding future games)
+    team_games = games_df[
+        (games_df['season'] == '2024') &
+        (games_df['date'].between(current_date - pd.Timedelta(days=7), current_date)) &
+        ((games_df['home_club_name'] == team_name) | (games_df['away_club_name'] == team_name))
+    ].sort_values('date', ascending=False)
+    
+    # 2. Check all 2024 season games (excluding future games)
+    if team_games.empty:
+        team_games = games_df[
+            (games_df['season'] == '2024') &
+            (games_df['date'] <= current_date) &
+            ((games_df['home_club_name'] == team_name) | (games_df['away_club_name'] == team_name))
+        ].sort_values('date', ascending=False)
+
+    # 3. Find first valid position
+    for _, game in team_games.iterrows():
+        position = game['home_club_position'] if game['home_club_name'] == team_name else game['away_club_position']
+        if pd.notna(position):
+            return pd.to_numeric(position, errors='coerce')
+
+    # 4. Fallback to club's average position
+    club_stats = get_club_stats(team_name)
+    return club_stats['avg_position']
+
 class AutocompleteCombobox(ttk.Combobox):
     def set_completion_list(self, completion_list):
         self._completion_list = sorted(completion_list, key=str.lower)
@@ -104,15 +138,15 @@ def predict_events(home_team, away_team, referee):
     features = pd.DataFrame([features_dict])[feature_order]
     prob = events_model.predict_proba(features)[0][1]
 
-    if prob < 0.4:
+    if prob < 0.6:
         estimate = "🔵 Estimated: 1 card"
-    elif prob < 0.5:
-        estimate = "🔵 Estimated: 2 cards"
-    elif prob < 0.6:
-        estimate = "🟢 Estimated: 3 cards"
     elif prob < 0.7:
-        estimate = "🟠 Estimated: 4 cards"
+        estimate = "🔵 Estimated: 2 cards"
     elif prob < 0.8:
+        estimate = "🟢 Estimated: 3 cards"
+    elif prob < 0.85:
+        estimate = "🟠 Estimated: 4 cards"
+    elif prob < 0.9:
         estimate = "🔴 Estimated: 5 cards"
     else:
         estimate = "🔴 Very likely 5+ cards"
@@ -127,6 +161,8 @@ def predict_events(home_team, away_team, referee):
 # Load data
 clubs_df = pd.read_sql("SELECT * FROM clubs", conn)
 games_df = pd.read_sql("SELECT * FROM games", conn)
+games_df['date'] = pd.to_datetime(games_df['date'])
+games_df['season'] = games_df['season'].astype(str)
 
 # Extract dropdown values
 teams = sorted(clubs_df['name'].dropna().unique().tolist())
@@ -191,12 +227,14 @@ def predict():
             (games_df['away_club_id'] == away.iloc[0]['club_id'])
         ].sort_values('date', ascending=False)
 
-        home_position = pd.to_numeric(game_sample.iloc[0]['home_club_position'], errors='coerce') if not game_sample.empty else np.nan
-        away_position = pd.to_numeric(game_sample.iloc[0]['away_club_position'], errors='coerce') if not game_sample.empty else np.nan
-
+        #home_position = pd.to_numeric(game_sample.iloc[0]['home_club_position'], errors='coerce') if not game_sample.empty else np.nan
+        #away_position = pd.to_numeric(game_sample.iloc[0]['away_club_position'], errors='coerce') if not game_sample.empty else np.nan
+        home_position = get_latest_position(home_team)
+        away_position = get_latest_position(away_team)
+        position_diff = home_position - away_position if not np.isnan(home_position) and not np.isnan(away_position) else 0
         attendance = home.iloc[0]['stadium_seats'] if venue != "Unknown" else 35000
         seats_diff = home.iloc[0]['stadium_seats'] - away.iloc[0]['stadium_seats']
-        position_diff = (home_position - away_position) if not np.isnan(home_position) and not np.isnan(away_position) else 0
+        #position_diff = (home_position - away_position) if not np.isnan(home_position) and not np.isnan(away_position) else 0
         age_diff = home.iloc[0]['average_age'] - away.iloc[0]['average_age']
         nationals_diff = home.iloc[0]['national_team_players'] - away.iloc[0]['national_team_players']
 
@@ -249,13 +287,13 @@ def predict():
         if event_prob < 0.4:
             card_estimate = "🔵 Estimated: 1 card"
         elif event_prob < 0.5:
-            card_estimate = "🔵 Estimated: 2 cards"
+            card_estimate = "🔵 Estimated: 1-2 cards"
         elif event_prob < 0.6:
-            card_estimate = "🟢 Estimated: 3 cards"
+            card_estimate = "🟢 Estimated: 2-3 cards"
         elif event_prob < 0.7:
-            card_estimate = "🟠 Estimated: 4 cards"
+            card_estimate = "🟠 Estimated: 3-4 cards"
         elif event_prob < 0.8:
-            card_estimate = "🔴 Estimated: 5 cards"
+            card_estimate = "🔴 Estimated: 4-5 cards"
         else:
             card_estimate = "🔴 Very likely 5+ cards"
 
