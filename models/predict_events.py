@@ -2,10 +2,11 @@ import sqlite3
 import pandas as pd
 import argparse
 import pickle
+import joblib
+import numpy as np
 
-# === Load model ===
-with open("/home/magilinux/footpredict/models/events_outcome_model.pkl", "rb") as f:
-    model = pickle.load(f)
+# Load the saved model
+model = joblib.load('footpredict/models/events_outcome_model.pkl')
 
 # === Connect to DB ===
 conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
