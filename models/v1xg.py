@@ -1,10 +1,10 @@
-# models/v1.py
+# models/v1xg.py
 
 import sqlite3
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier #v1
-#from xgboost import XGBClassifier #v1xg
+#from sklearn.ensemble import RandomForestClassifier #v1
+from xgboost import XGBClassifier #v1xg
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -141,21 +141,23 @@ X = games[features]
 y = games["result"]
 
 # Train model
-print("🤖 Training RandomForest Model...")
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-model = RandomForestClassifier(n_estimators=800, random_state=42, max_depth=20, max_features='sqrt',bootstrap=True)
-model.fit(X_train, y_train)
-
+print("🤖 Training XGBoost Model...")
 #X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-#model = XGBClassifier(
-#    n_estimators=100,
-#    learning_rate=0.1,
-#    max_depth=6,
-#    random_state=42,
-#    use_label_encoder=False,
-#    eval_metric='mlogloss'  # For multiclass classification
-#)
+#model = RandomForestClassifier(n_estimators=100, random_state=42)
 #model.fit(X_train, y_train)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+model = XGBClassifier(
+    n_estimators=200,
+    max_depth=4,
+    learning_rate=0.1,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    tree_method='hist',  # Use histogram-based CPU tree builder
+    verbosity=1,
+    n_jobs=2  # Keep it low so it doesn't freeze your system
+)
+model.fit(X_train, y_train)
 
 # Evaluate
 y_pred = model.predict(X_test)
@@ -164,14 +166,14 @@ print(classification_report(y_test, y_pred, target_names=["Home Win", "Draw", "A
 
 # Save model
 os.makedirs("models", exist_ok=True)
-joblib.dump(model, "match_outcome_model_v1.pkl")
-print("✅ Model saved to match_outcome_model_v1.pkl")
+joblib.dump(model, "match_outcome_model_v1xg.pkl")
+print("✅ Model saved to match_outcome_model_v1xg.pkl")
 
 # Confusion matrix
 conf_matrix = confusion_matrix(y_test, y_pred)
 disp = ConfusionMatrixDisplay(conf_matrix, display_labels=["Home Win", "Draw", "Away Win"])
 disp.plot()
-plt.savefig("v1_confusion_matrix.png")
+plt.savefig("v1xg_confusion_matrix.png")
 plt.close()
 
 # Feature importance
@@ -188,5 +190,5 @@ plt.title("Feature Importances")
 plt.bar(range(len(importances)), importances[indices], align="center")
 plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=45)
 plt.tight_layout()
-plt.savefig("v1_feature_importance.png")
+plt.savefig("v1xg_feature_importance.png")
 plt.close()

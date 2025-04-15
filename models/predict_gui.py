@@ -6,6 +6,8 @@ import sqlite3
 import numpy as np
 import json
 from datetime import datetime
+import os
+import sys
 
 # Get today's date and calculate the range
 current_date = pd.Timestamp.today().normalize()
@@ -134,7 +136,17 @@ class AutocompleteCombobox(ttk.Combobox):
 
 # Load models and database connection
 events_model = joblib.load('events_outcome_model.pkl')
-model = joblib.load("match_outcome_model_v1.pkl")
+#model = joblib.load("match_outcome_model_v2.pkl")
+
+# Get list of available models (excluding events model)
+script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+pkl_files = [f for f in os.listdir(script_dir) 
+            if f.endswith('.pkl') and f != 'events_outcome_model.pkl']
+
+if not pkl_files:
+    messagebox.showerror("Error", "No model files (.pkl) found in directory!")
+    sys.exit()
+
 with open('feature_names.json') as f:
     feature_order = json.load(f)
 conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
@@ -250,6 +262,17 @@ root.title("Match Outcome Predictor")
 root.geometry("600x700")  # Increased height for new dropdowns
 root.configure(bg="#f9f9f9")
 
+# Model Selection
+tk.Label(root, text="🤖 Select Model", bg="#f9f9f9").pack(pady=(10,5))
+model_var = tk.StringVar()
+model_combo = ttk.Combobox(root, textvariable=model_var, 
+                          values=pkl_files, state='readonly', width=50)
+model_combo.pack()
+
+# Set default model
+default_model = "match_outcome_model_v2.pkl" if "match_outcome_model_v2.pkl" in pkl_files else pkl_files[0]
+model_var.set(default_model)
+
 # Country and League Selectors
 tk.Label(root, text="🌍 Country", bg="#f9f9f9").pack(pady=(20, 5))
 country_var = tk.StringVar()
@@ -315,6 +338,9 @@ button_frame.pack(pady=(10, 20))
 
 def predict():
     try:
+        # Load selected model
+        selected_model = model_var.get()
+        model = joblib.load(selected_model)  # Now loaded dynamically
         home_team = home_var.get()
         away_team = away_var.get()
         referee = ref_var.get()
@@ -383,11 +409,11 @@ def predict():
         'value_diff': value_diff,
         'home_formation_strength': home_form_strength,
         'away_formation_strength': away_form_strength,
-        'formation_strength_diff': form_strength_diff
+        'formation_strength_diff': form_strength_diff,
         }])
 
 
-        probs = model.predict_proba(X_input)[0]
+        probs = model.predict_proba(X_input)[0]  # Use dynamically loaded model
         prediction = model.predict(X_input)[0]
         outcome = {0: "🏠 Home Win", 1: "🤝 Draw", 2: "🚗 Away Win"}
 
@@ -468,7 +494,7 @@ def clear_fields():
     venue_var.set('')
     home_combo.set_completion_list(teams)
     away_combo.set_completion_list(teams)
-    result_text.delete("1.0", tk.END)
+    #result_text.delete("1.0", tk.END)
     home_combo.focus_set()
 
 # Buttons
