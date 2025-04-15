@@ -9,8 +9,62 @@ from datetime import datetime
 
 # Get today's date and calculate the range
 current_date = pd.Timestamp.today().normalize()
-start_date = current_date - pd.Timedelta(days=14)
-end_date = current_date + pd.Timedelta(days=4)
+start_date = current_date - pd.Timedelta(days=28)
+end_date = current_date
+
+def get_latest_formation(club_id):
+    """Get the most recent formation used by a club in the last 14 days"""
+    current_date = pd.Timestamp.today().normalize()
+    
+    # Check last 14 days first
+    recent_games = games_df[
+        (games_df['date'] >= (current_date - pd.Timedelta(days=7))) &  # Fixed parenthesis
+        (games_df['date'] <= current_date) &
+        ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
+    ].sort_values('date', ascending=False)
+    
+    for _, game in recent_games.iterrows():
+        if game['home_club_id'] == club_id and pd.notna(game['home_club_formation']):
+            return game['home_club_formation']
+        elif game['away_club_id'] == club_id and pd.notna(game['away_club_formation']):
+            return game['away_club_formation']
+    
+    # Fallback to last known formation if none in last 14 days
+    all_games = games_df[
+        (games_df['date'] <= current_date) &
+        ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
+    ].sort_values('date', ascending=False)
+    
+    for _, game in all_games.iterrows():
+        if game['home_club_id'] == club_id and pd.notna(game['home_club_formation']):
+            return game['home_club_formation']
+        elif game['away_club_id'] == club_id and pd.notna(game['away_club_formation']):
+            return game['away_club_formation']
+    
+    return '4-4-2'  # Final fallback
+
+def calculate_formation_strength(club_id, formation, is_home=True):
+    """Calculate historical strength for a club's formation"""
+    current_date = pd.Timestamp.today().normalize()
+    
+    if is_home:
+        games = games_df[
+            (games_df['home_club_id'] == club_id) &
+            (games_df['home_club_formation'] == formation) &
+            (games_df['date'] < current_date)
+        ]
+        if not games.empty:
+            return (games['home_club_goals'] - games['away_club_goals']).mean()
+    else:
+        games = games_df[
+            (games_df['away_club_id'] == club_id) &
+            (games_df['away_club_formation'] == formation) &
+            (games_df['date'] < current_date)
+        ]
+        if not games.empty:
+            return (games['away_club_goals'] - games['home_club_goals']).mean()
+    
+    return 0.0  # Default strength if no history
 
 # Function to get the latest position for a team
 def get_latest_position(team_name):
@@ -19,7 +73,7 @@ def get_latest_position(team_name):
     # 1. Check games within ±7 days (excluding future games)
     team_games = games_df[
         (games_df['season'] == '2024') &
-        (games_df['date'].between(current_date - pd.Timedelta(days=7), current_date)) &
+        (games_df['date'].between(current_date - pd.Timedelta(days=28), current_date)) &
         ((games_df['home_club_name'] == team_name) | (games_df['away_club_name'] == team_name))
     ].sort_values('date', ascending=False)
     
@@ -162,8 +216,28 @@ def predict_events(home_team, away_team, referee):
 clubs_df = pd.read_sql("SELECT * FROM clubs", conn)
 games_df = pd.read_sql("SELECT * FROM games", conn)
 player_valuations_df = pd.read_sql("SELECT * FROM player_valuations", conn)
+competitions_df = pd.read_sql("SELECT DISTINCT country_id, country_name, competition_id, name as competition_name FROM competitions", conn)
 games_df['date'] = pd.to_datetime(games_df['date'])
 games_df['season'] = games_df['season'].astype(str)
+
+# Process competitions data
+competitions_df['country_name'] = np.where(competitions_df['country_id'] == -1, 'UEFA', competitions_df['country_name'])
+countries = sorted(competitions_df['country_name'].unique().tolist())
+country_to_id = competitions_df.set_index('country_name')['country_id'].to_dict()
+
+# Create country-league mapping
+country_league_map = {}
+for country in countries:
+    country_id = country_to_id[country]
+    leagues = competitions_df[competitions_df['country_name'] == country][['competition_name', 'competition_id']]
+    country_league_map[country] = {row['competition_name']: str(row['competition_id']) for _, row in leagues.iterrows()}
+
+# Create competition-clubs mapping
+competition_clubs_map = {}
+for competition_id in clubs_df['domestic_competition_id'].unique():
+    competition_id_str = str(competition_id)
+    clubs = clubs_df[clubs_df['domestic_competition_id'] == competition_id]['name'].tolist()
+    competition_clubs_map[competition_id_str] = clubs
 
 # Extract dropdown values
 teams = sorted(clubs_df['name'].dropna().unique().tolist())
@@ -173,11 +247,44 @@ venues = sorted(clubs_df['stadium_name'].dropna().unique().tolist())
 # Create main window
 root = tk.Tk()
 root.title("Match Outcome Predictor")
-root.geometry("600x600")
+root.geometry("600x700")  # Increased height for new dropdowns
 root.configure(bg="#f9f9f9")
 
-# UI Elements
-tk.Label(root, text="🏠 Home Team", bg="#f9f9f9").pack(pady=(20, 5))
+# Country and League Selectors
+tk.Label(root, text="🌍 Country", bg="#f9f9f9").pack(pady=(20, 5))
+country_var = tk.StringVar()
+country_combo = ttk.Combobox(root, textvariable=country_var, values=countries, state='readonly', width=50)
+country_combo.pack()
+
+tk.Label(root, text="🏆 League", bg="#f9f9f9").pack(pady=(10, 5))
+league_var = tk.StringVar()
+league_combo = ttk.Combobox(root, textvariable=league_var, state='readonly', width=50)
+league_combo.pack()
+
+def on_country_selected(event):
+    selected_country = country_var.get()
+    if selected_country:
+        leagues = list(country_league_map[selected_country].keys())
+        league_combo['values'] = leagues
+        league_var.set('')
+        home_var.set('')
+        away_var.set('')
+        home_combo.set_completion_list(teams)
+        away_combo.set_completion_list(teams)
+
+def on_league_selected(event):
+    selected_league = league_var.get()
+    if selected_league and country_var.get():
+        competition_id = country_league_map[country_var.get()][selected_league]
+        clubs = competition_clubs_map.get(competition_id, [])
+        home_combo.set_completion_list(clubs)
+        away_combo.set_completion_list(clubs)
+
+country_combo.bind("<<ComboboxSelected>>", on_country_selected)
+league_combo.bind("<<ComboboxSelected>>", on_league_selected)
+
+# Team Selectors
+tk.Label(root, text="🏠 Home Team", bg="#f9f9f9").pack(pady=(10, 5))
 home_var = tk.StringVar()
 home_combo = AutocompleteCombobox(root, textvariable=home_var, width=50)
 home_combo.set_completion_list(teams)
@@ -189,6 +296,7 @@ away_combo = AutocompleteCombobox(root, textvariable=away_var, width=50)
 away_combo.set_completion_list(teams)
 away_combo.pack()
 
+# Referee and Venue Selectors
 tk.Label(root, text="🧑‍⚖️ Referee", bg="#f9f9f9").pack(pady=(10, 5))
 ref_var = tk.StringVar()
 ref_combo = AutocompleteCombobox(root, textvariable=ref_var, width=50)
@@ -204,6 +312,7 @@ venue_combo.pack()
 # Button Frame
 button_frame = ttk.Frame(root)
 button_frame.pack(pady=(10, 20))
+
 def predict():
     try:
         home_team = home_var.get()
@@ -224,6 +333,13 @@ def predict():
 
         home_id = home.iloc[0]['club_id']
         away_id = away.iloc[0]['club_id']
+
+        # Get formations and calculate strengths
+        home_formation = get_latest_formation(home_id)
+        away_formation = get_latest_formation(away_id)
+        home_form_strength = calculate_formation_strength(home_id, home_formation, is_home=True)
+        away_form_strength = calculate_formation_strength(away_id, away_formation, is_home=False)
+        form_strength_diff = home_form_strength - away_form_strength
 
         game_sample = games_df[
             (games_df['home_club_id'] == home_id) &
@@ -264,7 +380,10 @@ def predict():
         'seats_diff': seats_diff,
         'total_value_home': home_team_value,
         'total_value_away': away_team_value,
-        'value_diff': value_diff
+        'value_diff': value_diff,
+        'home_formation_strength': home_form_strength,
+        'away_formation_strength': away_form_strength,
+        'formation_strength_diff': form_strength_diff
         }])
 
 
@@ -273,10 +392,14 @@ def predict():
         outcome = {0: "🏠 Home Win", 1: "🤝 Draw", 2: "🚗 Away Win"}
 
         result_text.delete("1.0", tk.END)
-        result_text.insert(tk.END, f"📊 Match Prediction Summary:\n")
-        result_text.insert(tk.END, f"🏟️  {home_team} vs {away_team}\n")
+        # Add formation display
+        result_text.insert(tk.END, f"📊 Match Prediction Summary:\n\n")
+        result_text.insert(tk.END, f"🏟️  {home_team} vs {away_team}\n\n")
         result_text.insert(tk.END, f"📌 Venue: {venue}\n")
         result_text.insert(tk.END, f"🧑‍⚖️ Referee: {referee}\n\n")
+        result_text.insert(tk.END, f"\n⚽ Recent Formations:\n")
+        result_text.insert(tk.END, f"🏠 {home_team}: {home_formation} (Strength: {home_form_strength:.2f})\n")
+        result_text.insert(tk.END, f"🚗 {away_team}: {away_formation} (Strength: {away_form_strength:.2f})\n\n")
         result_text.insert(tk.END, f"📈 Predicted Outcome: {outcome[prediction]}\n")
         result_text.insert(tk.END, f"🟢 Home Win: {probs[0]*100:.1f}%\n")
         result_text.insert(tk.END, f"🟡 Draw: {probs[1]*100:.1f}%\n")
@@ -337,10 +460,14 @@ def save_to_file():
         messagebox.showerror("Save Error", str(e))
 
 def clear_fields():
+    country_var.set('')
+    league_var.set('')
     home_var.set('')
     away_var.set('')
     ref_var.set('')
     venue_var.set('')
+    home_combo.set_completion_list(teams)
+    away_combo.set_completion_list(teams)
     result_text.delete("1.0", tk.END)
     home_combo.focus_set()
 
