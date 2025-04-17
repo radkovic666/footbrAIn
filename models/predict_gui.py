@@ -8,47 +8,69 @@ import json
 from datetime import datetime
 import os
 import sys
+import traceback
 
-# Get today's date and calculate the range
+# Get today's date
 current_date = pd.Timestamp.today().normalize()
-start_date = current_date - pd.Timedelta(days=28)
-end_date = current_date
+
+def log_error(error):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("log.txt", "a") as f:
+        f.write(f"\n\n[{timestamp}] ERROR:\n")
+        f.write(f"Message: {str(error)}\n")
+        f.write(f"Traceback:\n{traceback.format_exc()}")
+        f.write("-" * 40)
+
+# Load models
+events_model = joblib.load('events_outcome_model.pkl')
+script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+pkl_files = [f for f in os.listdir(script_dir) if f.endswith('.pkl') and f != 'events_outcome_model.pkl']
+if not pkl_files:
+    messagebox.showerror("Error", "No model files (.pkl) found in directory!")
+    sys.exit()
+with open('feature_names.json') as f:
+    feature_order = json.load(f)
+
+# Database
+conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
+
+def get_latest_goalkeeper(club_id):
+    gk_lineups = game_lineups[
+        (game_lineups['club_id'] == club_id) &
+        (game_lineups['position'] == 'Goalkeeper') &
+        (game_lineups['type'] == 'starting_lineup')
+    ].sort_values('game_id', ascending=False)
+    if not gk_lineups.empty:
+        return gk_lineups.iloc[0]['player_id']
+    return None
 
 def get_latest_formation(club_id):
-    """Get the most recent formation used by a club in the last 14 days"""
-    current_date = pd.Timestamp.today().normalize()
-    
-    # Check last 14 days first
     recent_games = games_df[
-        (games_df['date'] >= (current_date - pd.Timedelta(days=7))) &  # Fixed parenthesis
+        (games_df['date'] >= (current_date - pd.Timedelta(days=7))) &
         (games_df['date'] <= current_date) &
         ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
     ].sort_values('date', ascending=False)
-    
+
     for _, game in recent_games.iterrows():
         if game['home_club_id'] == club_id and pd.notna(game['home_club_formation']):
             return game['home_club_formation']
         elif game['away_club_id'] == club_id and pd.notna(game['away_club_formation']):
             return game['away_club_formation']
-    
-    # Fallback to last known formation if none in last 14 days
+
     all_games = games_df[
         (games_df['date'] <= current_date) &
         ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
     ].sort_values('date', ascending=False)
-    
+
     for _, game in all_games.iterrows():
         if game['home_club_id'] == club_id and pd.notna(game['home_club_formation']):
             return game['home_club_formation']
         elif game['away_club_id'] == club_id and pd.notna(game['away_club_formation']):
             return game['away_club_formation']
-    
-    return '4-4-2'  # Final fallback
+
+    return '4-4-2'
 
 def calculate_formation_strength(club_id, formation, is_home=True):
-    """Calculate historical strength for a club's formation"""
-    current_date = pd.Timestamp.today().normalize()
-    
     if is_home:
         games = games_df[
             (games_df['home_club_id'] == club_id) &
@@ -65,21 +87,15 @@ def calculate_formation_strength(club_id, formation, is_home=True):
         ]
         if not games.empty:
             return (games['away_club_goals'] - games['home_club_goals']).mean()
-    
-    return 0.0  # Default strength if no history
+    return 0.0
 
-# Function to get the latest position for a team
 def get_latest_position(team_name):
-    current_date = pd.Timestamp.today().normalize()
-    
-    # 1. Check games within ±7 days (excluding future games)
     team_games = games_df[
         (games_df['season'] == '2024') &
         (games_df['date'].between(current_date - pd.Timedelta(days=28), current_date)) &
         ((games_df['home_club_name'] == team_name) | (games_df['away_club_name'] == team_name))
     ].sort_values('date', ascending=False)
-    
-    # 2. Check all 2024 season games (excluding future games)
+
     if team_games.empty:
         team_games = games_df[
             (games_df['season'] == '2024') &
@@ -87,16 +103,117 @@ def get_latest_position(team_name):
             ((games_df['home_club_name'] == team_name) | (games_df['away_club_name'] == team_name))
         ].sort_values('date', ascending=False)
 
-    # 3. Find first valid position
     for _, game in team_games.iterrows():
         position = game['home_club_position'] if game['home_club_name'] == team_name else game['away_club_position']
         if pd.notna(position):
             return pd.to_numeric(position, errors='coerce')
 
-    # 4. Fallback to club's average position
     club_stats = get_club_stats(team_name)
     return club_stats['avg_position']
 
+def get_club_stats(club_name):
+    query = """
+        SELECT
+            AVG(attendance) AS avg_attendance,
+            AVG(CASE WHEN home_club_name = ? THEN home_club_position
+                     WHEN away_club_name = ? THEN away_club_position ELSE NULL END) AS avg_position,
+            (SELECT COUNT(*) * 1.0 / COUNT(DISTINCT game_id)
+             FROM game_events
+             WHERE type = 'Cards' AND club_id IN (
+                 SELECT DISTINCT home_club_id FROM games WHERE home_club_name = ?
+                 UNION
+                 SELECT DISTINCT away_club_id FROM games WHERE away_club_name = ?
+             )) AS avg_cards
+        FROM games
+        WHERE home_club_name = ? OR away_club_name = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(club_name, club_name, club_name, club_name, club_name, club_name))
+    if df.empty or df['avg_attendance'].isna().all():
+        return {'avg_attendance': 35000, 'avg_position': 10, 'avg_cards': 2.1}
+    return {
+        'avg_attendance': df['avg_attendance'].iloc[0] or 35000,
+        'avg_position': df['avg_position'].iloc[0] or 10,
+        'avg_cards': df['avg_cards'].iloc[0] or 2.1
+    }
+
+def calculate_form_last5(club_id, is_home):
+    """
+    Calculates average form (points per game) for the last 5 matches played by the given club.
+    Looks at both home and away games and only includes matches before today.
+    """
+    current_date = pd.Timestamp.today().normalize()
+
+    # Filter games played by the club before today
+    relevant_games = games_df[
+        (games_df['date'] < current_date) & 
+        ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
+    ].sort_values('date', ascending=False)
+
+    recent_games = relevant_games.head(5)
+
+    points = 0
+    total_games = 0
+
+    for _, game in recent_games.iterrows():
+        if game['home_club_id'] == club_id:
+            goals_for = game['home_club_goals']
+            goals_against = game['away_club_goals']
+        else:
+            goals_for = game['away_club_goals']
+            goals_against = game['home_club_goals']
+
+        if pd.notna(goals_for) and pd.notna(goals_against):
+            if goals_for > goals_against:
+                points += 3
+            elif goals_for == goals_against:
+                points += 1
+            # else 0 points
+            total_games += 1
+
+    return points / total_games if total_games > 0 else 0.0
+
+def get_clean_sheets_last5(gk_player_id, club_id):
+    """Calculate number of clean sheets in last 5 matches for a goalkeeper"""
+    # Get all games where the GK played for this club
+    gk_games = game_lineups[
+        (game_lineups['player_id'] == gk_player_id) &
+        (game_lineups['club_id'] == club_id)
+    ]['game_id'].unique()
+    
+    # Get match data for these games
+    club_games = games_df[
+        (games_df['game_id'].isin(gk_games)) &
+        ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id)) &
+        (games_df['date'] < current_date)
+    ].sort_values('date', ascending=False)
+    
+    # Take last 5 games
+    last5 = club_games.head(5)
+    
+    # Count clean sheets
+    clean_sheets = 0
+    for _, game in last5.iterrows():
+        if game['home_club_id'] == club_id:
+            conceded = game['away_club_goals']
+        else:
+            conceded = game['home_club_goals']
+        if pd.notna(conceded) and conceded == 0:
+            clean_sheets += 1
+            
+    return clean_sheets
+
+def get_avg_cards_per_referee(ref_name):
+    query = """
+        SELECT COUNT(*) * 1.0 / COUNT(DISTINCT game_id) AS avg_cards
+        FROM game_events
+        WHERE type = 'Cards' AND game_id IN (
+            SELECT game_id FROM games WHERE referee = ?
+        )
+    """
+    result = pd.read_sql_query(query, conn, params=(ref_name,))
+    return result['avg_cards'].iloc[0] if not result.empty and pd.notna(result['avg_cards'].iloc[0]) else 3.5
+
+# Combobox with autocomplete
 class AutocompleteCombobox(ttk.Combobox):
     def set_completion_list(self, completion_list):
         self._completion_list = sorted(completion_list, key=str.lower)
@@ -187,43 +304,6 @@ def get_club_stats(club_name):
         'avg_cards': df['avg_cards'].iloc[0] or 2.1
     }
 
-def predict_events(home_team, away_team, referee):
-    home = get_club_stats(home_team)
-    away = get_club_stats(away_team)
-    ref_cards = get_avg_cards_per_referee(referee)
-
-    features_dict = {
-        'attendance': (home['avg_attendance'] + away['avg_attendance']) / 2,
-        'avg_cards_home': home['avg_cards'],
-        'avg_cards_away': away['avg_cards'],
-        'home_club_position': home['avg_position'],
-        'away_club_position': away['avg_position'],
-        'avg_cards_per_game_referee': ref_cards
-    }
-
-    features = pd.DataFrame([features_dict])[feature_order]
-    prob = events_model.predict_proba(features)[0][1]
-
-    if prob < 0.6:
-        estimate = "🔵 Estimated: 1 card"
-    elif prob < 0.7:
-        estimate = "🔵 Estimated: 2 cards"
-    elif prob < 0.8:
-        estimate = "🟢 Estimated: 3 cards"
-    elif prob < 0.85:
-        estimate = "🟠 Estimated: 4 cards"
-    elif prob < 0.9:
-        estimate = "🔴 Estimated: 5 cards"
-    else:
-        estimate = "🔴 Very likely 5+ cards"
-
-    return (
-        f"\n📊 Event Prediction Feature Summary:\n"
-        + features.T.to_string()
-        + f"\n\n📈 Prediction Probability: {prob * 100:.2f}%"
-        + f"\n📌 Estimated Match Card Range: {estimate}"
-    )
-
 # Load data
 clubs_df = pd.read_sql("SELECT * FROM clubs", conn)
 games_df = pd.read_sql("SELECT * FROM games", conn)
@@ -231,6 +311,7 @@ player_valuations_df = pd.read_sql("SELECT * FROM player_valuations", conn)
 competitions_df = pd.read_sql("SELECT DISTINCT country_id, country_name, competition_id, name as competition_name FROM competitions", conn)
 games_df['date'] = pd.to_datetime(games_df['date'])
 games_df['season'] = games_df['season'].astype(str)
+game_lineups = pd.read_sql("SELECT * FROM game_lineups", conn)  # Added
 
 # Process competitions data
 competitions_df['country_name'] = np.where(competitions_df['country_id'] == -1, 'UEFA', competitions_df['country_name'])
@@ -340,7 +421,8 @@ def predict():
     try:
         # Load selected model
         selected_model = model_var.get()
-        model = joblib.load(selected_model)  # Now loaded dynamically
+        model = joblib.load(selected_model)
+        
         home_team = home_var.get()
         away_team = away_var.get()
         referee = ref_var.get()
@@ -360,27 +442,36 @@ def predict():
         home_id = home.iloc[0]['club_id']
         away_id = away.iloc[0]['club_id']
 
-        # Get formations and calculate strengths
+        # Goalkeepers and form
+        home_gk = get_latest_goalkeeper(home_id)
+        away_gk = get_latest_goalkeeper(away_id)
+        home_form_last5 = calculate_form_last5(home_id, is_home=True)
+        away_form_last5 = calculate_form_last5(away_id, is_home=False)
+        form_diff = home_form_last5 - away_form_last5
+
+        home_gk_clean_sheets = get_clean_sheets_last5(home_gk, home_id) if home_gk else 0
+        away_gk_clean_sheets = get_clean_sheets_last5(away_gk, away_id) if away_gk else 0
+        clean_sheets_diff = home_gk_clean_sheets - away_gk_clean_sheets
+
+        # Formations
         home_formation = get_latest_formation(home_id)
         away_formation = get_latest_formation(away_id)
         home_form_strength = calculate_formation_strength(home_id, home_formation, is_home=True)
         away_form_strength = calculate_formation_strength(away_id, away_formation, is_home=False)
         form_strength_diff = home_form_strength - away_form_strength
 
-        game_sample = games_df[
-            (games_df['home_club_id'] == home_id) &
-            (games_df['away_club_id'] == away_id)
-        ].sort_values('date', ascending=False)
-
         home_position = get_latest_position(home_team)
         away_position = get_latest_position(away_team)
+        form_x_position_home = home_form_last5 * home_position
+        form_x_position_away = away_form_last5 * away_position
         position_diff = home_position - away_position if not np.isnan(home_position) and not np.isnan(away_position) else 0
+
         attendance = home.iloc[0]['stadium_seats'] if venue != "Unknown" else 35000
         seats_diff = home.iloc[0]['stadium_seats'] - away.iloc[0]['stadium_seats']
         age_diff = home.iloc[0]['average_age'] - away.iloc[0]['average_age']
         nationals_diff = home.iloc[0]['national_team_players'] - away.iloc[0]['national_team_players']
 
-        # 🧮 Calculate team values from latest valuations
+        # 🧮 Team values
         def get_team_value(club_id):
             valuations = player_valuations_df[player_valuations_df["current_club_id"] == club_id]
             latest_dates = valuations.groupby("player_id")["date"].idxmax()
@@ -389,29 +480,33 @@ def predict():
 
         home_team_value = get_team_value(home_id)
         away_team_value = get_team_value(away_id)
-
         value_diff = home_team_value - away_team_value
-        
-        X_input = pd.DataFrame([{
-        'home_squad_size': home.iloc[0]['squad_size'],
-        'home_average_age': home.iloc[0]['average_age'],
-        'away_squad_size': away.iloc[0]['squad_size'],
-        'away_average_age': away.iloc[0]['average_age'],
-        'home_club_position': home_position,
-        'away_club_position': away_position,
-        'attendance': attendance,
-        'position_diff': position_diff,
-        'age_diff': age_diff,
-        'nationals_diff': nationals_diff,
-        'seats_diff': seats_diff,
-        'total_value_home': home_team_value,
-        'total_value_away': away_team_value,
-        'value_diff': value_diff,
-        'home_formation_strength': home_form_strength,
-        'away_formation_strength': away_form_strength,
-        'formation_strength_diff': form_strength_diff,
-        }])
 
+        # Feature engineering
+        form_x_clean_sheets = form_diff * clean_sheets_diff
+        value_per_age = value_diff / (age_diff + 1e-5)
+
+        # Input vector for prediction
+        X_input = pd.DataFrame([{
+
+            'position_diff': position_diff,
+            'form_diff': form_diff,
+            'clean_sheets_diff': clean_sheets_diff,
+            'home_club_position': home_position,
+            'away_club_position': away_position,
+            'formation_strength_diff': form_strength_diff,
+            'attendance': attendance,
+            'nationals_diff': nationals_diff,           
+            'seats_diff': seats_diff,
+            'value_diff': value_diff,
+            'form_x_position_home': form_x_position_home,
+            'form_x_position_away': form_x_position_away,
+            'home_gk_clean_sheets_last5': home_gk_clean_sheets,
+            'away_gk_clean_sheets_last5': away_gk_clean_sheets,
+            'total_value_home': home_team_value,
+            'total_value_away': away_team_value
+            #'form_x_clean_sheets': form_x_clean_sheets
+        }])
 
         probs = model.predict_proba(X_input)[0]  # Use dynamically loaded model
         prediction = model.predict(X_input)[0]
@@ -465,8 +560,8 @@ def predict():
         result_text.insert(tk.END, "\n📦 Event Outcome Prediction (Cards):\n")
         result_text.insert(tk.END, f"📈 Probability: {event_prob * 100:.2f}%\n")
         result_text.insert(tk.END, f"{card_estimate}\n")
-
     except Exception as e:
+        log_error(e)  # <-- Add this before showing messagebox
         messagebox.showerror("Error", str(e))
 
 def save_to_file():
@@ -483,6 +578,7 @@ def save_to_file():
             f.write(f"{'='*40}\n")
         messagebox.showinfo("Success", "Prediction saved to betslip.txt!")
     except Exception as e:
+        log_error(e)  # <-- Add this
         messagebox.showerror("Save Error", str(e))
 
 def clear_fields():
