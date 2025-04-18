@@ -65,7 +65,8 @@ df = df.merge(away_aggression, on='away_club_id', how='left')
 
 # === Final Features and Target ===
 features = [
-    'attendance', 'home_club_position', 'away_club_position',
+    #'attendance', 
+    'home_club_position', 'away_club_position',
     'avg_cards_per_game_referee', 'avg_cards_home', 'avg_cards_away'
 ]
 

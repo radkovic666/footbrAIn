@@ -253,7 +253,39 @@ games['home_power'] = games.groupby('home_club_id')['home_club_goals'].transform
 games['away_power'] = games.groupby('away_club_id')['away_club_goals'].transform(
     lambda x: x.rolling(window=5, min_periods=1).mean()
 )
+
+# Compute binary win results
+games['home_win'] = (games['home_club_goals'] > games['away_club_goals']).astype(int)
+games['away_win'] = (games['away_club_goals'] > games['home_club_goals']).astype(int)
+
+# Rolling win rate (last 5)
+games['home_win_rate'] = games.groupby('home_club_id')['home_win'].transform(
+    lambda x: x.rolling(5, min_periods=1).mean()
+)
+games['away_win_rate'] = games.groupby('away_club_id')['away_win'].transform(
+    lambda x: x.rolling(5, min_periods=1).mean()
+)
+games['win_rate_diff'] = games['home_win_rate'] - games['away_win_rate']
+
+# Rolling goals conceded (last 5)
+games['home_conceded'] = games.groupby('home_club_id')['away_club_goals'].transform(
+    lambda x: x.rolling(5, min_periods=1).mean()
+)
+games['away_conceded'] = games.groupby('away_club_id')['home_club_goals'].transform(
+    lambda x: x.rolling(5, min_periods=1).mean()
+)
+games['conceded_diff'] = games['away_conceded'] - games['home_conceded']
+
+# Rolling form trend (difference between recent and earlier form)
+def form_trend(series):
+    return series.rolling(3).mean() - series.shift(3).rolling(3).mean()
 games['power_rank_diff'] = games['home_power'] - games['away_power']
+games['win_rate_diff'] = games['home_win_rate'] - games['away_win_rate']
+games['conceded_diff'] = games['away_conceded'] - games['home_conceded']
+games['home_trend'] = games.groupby('home_club_id')['home_form_last5'].transform(form_trend)
+games['away_trend'] = games.groupby('away_club_id')['away_form_last5'].transform(form_trend)
+games['trend_diff'] = games['home_trend'] - games['away_trend']
+
 # Ensure numeric positions
 for col in ['home_club_position', 'away_club_position']:
     games[col] = pd.to_numeric(games[col], errors='coerce')
@@ -264,14 +296,14 @@ features = [
     'home_club_position', 'away_club_position',
     'form_x_position_home', 'form_x_position_away',
     'home_gk_clean_sheets_last5', 'away_gk_clean_sheets_last5',
-    'relative_strength', 'power_rank_diff'
+    'relative_strength', 'power_rank_diff', 'win_rate_diff', 'conceded_diff', 'trend_diff'
 ]
 
 
 # Validate all features exist before dropping NA
 missing_features = [f for f in features + ["result"] if f not in games.columns]
 if missing_features:
-    print("Available columns:", sorted(games.columns.tolist()))
+    print("Available columns:", [col for col in games.columns])
     raise ValueError(f"Missing required features: {missing_features}")
 
 # Remove rows with missing values
@@ -321,7 +353,6 @@ def custom_f1_score(preds, dtrain):
     labels = dtrain.get_label()
     preds = preds.reshape(3, -1).argmax(axis=0)
     return 'f1_macro', f1_score(labels, preds, average='macro')
-
 # Enhanced XGBoost configuration
 xgb_model = XGBClassifier(
     objective='multi:softprob',

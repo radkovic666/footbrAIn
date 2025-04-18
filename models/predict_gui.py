@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 import sys
 import traceback
-
+from sklearn.metrics import f1_score  # Added for custom_f1_score
 # --- Splash Screen Setup ---
 splash = tk.Tk()
 splash.overrideredirect(True)  # Remove window decorations
@@ -94,6 +94,11 @@ splash.update()
 
 # Get today's date
 current_date = pd.Timestamp.today().normalize()
+
+def custom_f1_score(preds, dtrain):
+    labels = dtrain.get_label()
+    preds = preds.reshape(3, -1).argmax(axis=0)
+    return 'f1_macro', f1_score(labels, preds, average='macro')
 
 def log_error(error):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -466,6 +471,158 @@ venue_combo.pack()
 button_frame = ttk.Frame(root)
 button_frame.pack(pady=(10, 20))
 
+def calculate_rolling_average(club_id, goal_column, is_home=True):
+    """Calculate rolling average goals for a club"""
+    if is_home:
+        club_games = games_df[
+            (games_df['home_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False)
+        if not club_games.empty:
+            return club_games[goal_column].head(5).mean()
+    else:
+        club_games = games_df[
+            (games_df['away_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False)
+        if not club_games.empty:
+            return club_games[goal_column].head(5).mean()
+    return 0.0
+
+def calculate_win_rate(club_id, is_home=True):
+    """Calculate win rate for last 5 matches"""
+    if is_home:
+        club_games = games_df[
+            (games_df['home_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False).head(5)
+        wins = (club_games['home_club_goals'] > club_games['away_club_goals']).sum()
+    else:
+        club_games = games_df[
+            (games_df['away_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False).head(5)
+        wins = (club_games['away_club_goals'] > club_games['home_club_goals']).sum()
+    return wins / 5 if len(club_games) == 5 else 0.0
+def calculate_form_last5(club_id, is_home=True):
+    """Calculate form (points per game) for last 5 matches"""
+    current_date = pd.Timestamp.today().normalize()
+    
+    # Filter games played by the club before today
+    relevant_games = games_df[
+        (games_df['date'] < current_date) & 
+        ((games_df['home_club_id'] == club_id) | (games_df['away_club_id'] == club_id))
+    ].sort_values('date', ascending=False)
+
+    recent_games = relevant_games.head(5)
+
+    points = 0
+    total_games = 0
+
+    for _, game in recent_games.iterrows():
+        if game['home_club_id'] == club_id:
+            goals_for = game['home_club_goals']
+            goals_against = game['away_club_goals']
+        else:
+            goals_for = game['away_club_goals']
+            goals_against = game['home_club_goals']
+
+        if pd.notna(goals_for) and pd.notna(goals_against):
+            if goals_for > goals_against:
+                points += 3
+            elif goals_for == goals_against:
+                points += 1
+            # else 0 points
+            total_games += 1
+
+    return points / total_games if total_games > 0 else 0.0
+
+def calculate_form_trend(club_id, is_home=True):
+    """Calculate form trend (difference between recent and earlier form)"""
+    current_date = pd.Timestamp.today().normalize()
+    
+    if is_home:
+        club_games = games_df[
+            (games_df['home_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False)
+    else:
+        club_games = games_df[
+            (games_df['away_club_id'] == club_id) &
+            (games_df['date'] < current_date)
+        ].sort_values('date', ascending=False)
+    
+    if len(club_games) >= 6:
+        # Calculate form for recent 3 games
+        recent_form = 0
+        recent_games = club_games.iloc[:3]
+        for _, game in recent_games.iterrows():
+            if game['home_club_id'] == club_id:
+                goals_for = game['home_club_goals']
+                goals_against = game['away_club_goals']
+            else:
+                goals_for = game['away_club_goals']
+                goals_against = game['home_club_goals']
+                
+            if pd.notna(goals_for) and pd.notna(goals_against):
+                if goals_for > goals_against:
+                    recent_form += 3
+                elif goals_for == goals_against:
+                    recent_form += 1
+        
+        # Calculate form for previous 3 games (games 3-6)
+        earlier_form = 0
+        earlier_games = club_games.iloc[3:6]
+        for _, game in earlier_games.iterrows():
+            if game['home_club_id'] == club_id:
+                goals_for = game['home_club_goals']
+                goals_against = game['away_club_goals']
+            else:
+                goals_for = game['away_club_goals']
+                goals_against = game['home_club_goals']
+                
+            if pd.notna(goals_for) and pd.notna(goals_against):
+                if goals_for > goals_against:
+                    earlier_form += 3
+                elif goals_for == goals_against:
+                    earlier_form += 1
+        
+        recent_avg = recent_form / 3 if len(recent_games) == 3 else 0
+        earlier_avg = earlier_form / 3 if len(earlier_games) == 3 else 0
+        
+        return recent_avg - earlier_avg
+    
+    return 0.0
+
+def save_to_file():
+    try:
+        content = result_text.get("1.0", tk.END)
+        if not content.strip():
+            messagebox.showwarning("Warning", "No prediction to save!")
+            return
+            
+        with open("betslip.txt", "a") as f:
+            f.write(f"\n\n{'='*40}\n")
+            f.write(f"Prediction saved at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(content)
+            f.write(f"{'='*40}\n")
+        messagebox.showinfo("Success", "Prediction saved to betslip.txt!")
+    except Exception as e:
+        log_error(e)  # <-- Add this
+        messagebox.showerror("Save Error", str(e))
+
+def clear_fields():
+    country_var.set('')
+    league_var.set('')
+    home_var.set('')
+    away_var.set('')
+    ref_var.set('')
+    venue_var.set('')
+    home_combo.set_completion_list(teams)
+    away_combo.set_completion_list(teams)
+    #result_text.delete("1.0", tk.END)
+    home_combo.focus_set()
+
 def predict():
     try:
         # Load selected model
@@ -478,7 +635,7 @@ def predict():
         venue = venue_var.get()
 
         if home_team == away_team:
-            messagebox.showerror("Error", "Home and away teams must be different.")
+            messagebox.showwarning("Error", "Home and away teams must be different.")
             return
 
         home = clubs_df[clubs_df["name"] == home_team]
@@ -511,16 +668,9 @@ def predict():
 
         home_position = get_latest_position(home_team)
         away_position = get_latest_position(away_team)
-        form_x_position_home = home_form_last5 * home_position
-        form_x_position_away = away_form_last5 * away_position
         position_diff = home_position - away_position if not np.isnan(home_position) and not np.isnan(away_position) else 0
 
-        attendance = home.iloc[0]['stadium_seats'] if venue != "Unknown" else 35000
-        seats_diff = home.iloc[0]['stadium_seats'] - away.iloc[0]['stadium_seats']
-        age_diff = home.iloc[0]['average_age'] - away.iloc[0]['average_age']
-        nationals_diff = home.iloc[0]['national_team_players'] - away.iloc[0]['national_team_players']
-
-        # 🧮 Team values
+        # Team value info
         def get_team_value(club_id):
             valuations = player_valuations_df[player_valuations_df["current_club_id"] == club_id]
             latest_dates = valuations.groupby("player_id")["date"].idxmax()
@@ -531,38 +681,54 @@ def predict():
         away_team_value = get_team_value(away_id)
         value_diff = home_team_value - away_team_value
 
-        # Feature engineering
-        form_x_clean_sheets = form_diff * clean_sheets_diff
-        value_per_age = value_diff / (age_diff + 1e-5)
+        # Calculate additional features from v2.py
+        relative_strength = (home_form_last5 + 0.1) / (away_form_last5 + 0.1)
+        form_x_position_home = home_form_last5 * (1/max(home_position, 1))  # Avoid division by zero
+        form_x_position_away = away_form_last5 * (1/max(away_position, 1))
+        
+        # Calculate power rankings (rolling average goals)
+        home_power = calculate_rolling_average(home_id, 'home_club_goals', is_home=True)
+        away_power = calculate_rolling_average(away_id, 'away_club_goals', is_home=False)
+        power_rank_diff = home_power - away_power
+        
+        # Calculate win rates
+        home_win_rate = calculate_win_rate(home_id, is_home=True)
+        away_win_rate = calculate_win_rate(away_id, is_home=False)
+        win_rate_diff = home_win_rate - away_win_rate
+        
+        # Calculate conceded goals
+        home_conceded = calculate_rolling_average(home_id, 'away_club_goals', is_home=True)
+        away_conceded = calculate_rolling_average(away_id, 'home_club_goals', is_home=False)
+        conceded_diff = away_conceded - home_conceded
+        
+        # Calculate form trends
+        home_trend = calculate_form_trend(home_id, is_home=True)
+        away_trend = calculate_form_trend(away_id, is_home=False)
+        trend_diff = home_trend - away_trend
 
-        # Input vector for prediction
+        # Input vector for prediction - must match exactly with v2.py features
         X_input = pd.DataFrame([{
-
             'position_diff': position_diff,
             'form_diff': form_diff,
             'clean_sheets_diff': clean_sheets_diff,
             'home_club_position': home_position,
             'away_club_position': away_position,
-            'formation_strength_diff': form_strength_diff,
-            'attendance': attendance,
-            'nationals_diff': nationals_diff,           
-            'seats_diff': seats_diff,
-            'value_diff': value_diff,
-            #'form_x_position_home': form_x_position_home,
-            #'form_x_position_away': form_x_position_away,
+            'form_x_position_home': form_x_position_home,
+            'form_x_position_away': form_x_position_away,
             'home_gk_clean_sheets_last5': home_gk_clean_sheets,
             'away_gk_clean_sheets_last5': away_gk_clean_sheets,
-            'total_value_home': home_team_value,
-            'total_value_away': away_team_value
-            #'form_x_clean_sheets': form_x_clean_sheets
+            'relative_strength': relative_strength,
+            'power_rank_diff': power_rank_diff,
+            'win_rate_diff': win_rate_diff,
+            'conceded_diff': conceded_diff,
+            'trend_diff': trend_diff
         }])
 
-        probs = model.predict_proba(X_input)[0]  # Use dynamically loaded model
+        probs = model.predict_proba(X_input)[0]
         prediction = model.predict(X_input)[0]
         outcome = {0: "🏠 Home Win", 1: "🤝 Draw", 2: "🚗 Away Win"}
 
         result_text.delete("1.0", tk.END)
-        # Add formation display
         result_text.insert(tk.END, f"📊 Match Prediction Summary:\n\n")
         result_text.insert(tk.END, f"🏟️  {home_team} vs {away_team}\n\n")
         result_text.insert(tk.END, f"📌 Venue: {venue}\n")
@@ -576,14 +742,14 @@ def predict():
         result_text.insert(tk.END, f"🔴 Away Win: {probs[2]*100:.1f}%\n\n")
         result_text.insert(tk.END, f"📊 Features Used:\n")
         for k, v in X_input.iloc[0].items():
-            result_text.insert(tk.END, f"  {k}: {v}\n")
+            result_text.insert(tk.END, f"  {k}: {v:.4f}\n")
 
         ref_avg = get_avg_cards_per_referee(referee)
         home_stats = get_club_stats(home_team)
         away_stats = get_club_stats(away_team)
 
         event_features = pd.DataFrame([{
-            'attendance': attendance,
+            #'attendance': attendance,
             'avg_cards_home': home_stats['avg_cards'],
             'avg_cards_away': away_stats['avg_cards'],
             'home_club_position': home_stats['avg_position'],
