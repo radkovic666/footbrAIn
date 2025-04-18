@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from PIL import Image
+import PIL.ImageTk  # Explicit ImageTk import
 import pandas as pd
 import joblib
 import sqlite3
@@ -9,6 +11,86 @@ from datetime import datetime
 import os
 import sys
 import traceback
+
+# --- Splash Screen Setup ---
+splash = tk.Tk()
+splash.overrideredirect(True)  # Remove window decorations
+
+# Load splash image
+img = Image.open(os.path.join(os.path.dirname(__file__), "splash.png"))
+
+# Calculate half size while maintaining aspect ratio
+new_width = img.width // 2
+new_height = img.height // 2
+img = img.resize((new_width, new_height), Image.LANCZOS)  # High-quality resizing
+
+# Create PhotoImage after resizing
+#photo = ImageTk.PhotoImage(img)
+
+# Center the splash screen
+screen_width = splash.winfo_screenwidth()
+screen_height = splash.winfo_screenheight()
+max_width = screen_width // 2
+max_height = screen_height // 2
+if img.width > max_width or img.height > max_height:
+    ratio = min(max_width/img.width, max_height/img.height)
+    new_width = int(img.width * ratio)
+    new_height = int(img.height * ratio)
+    img = img.resize((new_width, new_height), Image.LANCZOS)
+
+# Create PhotoImage after resizing
+photo = PIL.ImageTk.PhotoImage(img)
+
+# Create canvas instead of label for better control
+canvas = tk.Canvas(splash, width=new_width, height=new_height, highlightthickness=0)
+canvas.pack()
+
+# Display image on canvas
+canvas.create_image(0, 0, image=photo, anchor="nw")
+
+# Add text directly on canvas
+text_info = """VARIO Engine v0.54
+Created by Dragomir Dimitrov
+April 2025
+"""
+canvas.create_text(
+    10, 10,  # x,y position
+    text=text_info,
+    font=("Arial", 10),
+    fill="white",
+    anchor="nw",  # northwest alignment
+    width=new_width-40  # text wrapping boundary
+)
+text_loading = """Loading current season database...
+Please wait...
+"""
+canvas.create_text(
+    10, 370,  # x,y position
+    text=text_loading,
+    font=("Arial", 12),
+    fill="white",
+    anchor="sw",  # northwest alignment
+    width=new_width-40  # text wrapping boundary
+)
+
+# Add semi-transparent background for text
+#canvas.create_rectangle(
+#    10, 10,  # x1,y1
+#    new_width-10, 100,  # x2,y2 (adjust height as needed)
+#    fill="black",
+#    stipple="gray25"  # creates 25% transparency effect
+#)
+
+# Center the splash screen
+screen_width = splash.winfo_screenwidth()
+screen_height = splash.winfo_screenheight()
+x = (screen_width - new_width) // 2
+y = (screen_height - new_height) // 2
+splash.geometry(f"{new_width}x{new_height}+{x}+{y}")
+
+# Force immediate update
+splash.update_idletasks()
+splash.update()
 
 # Get today's date
 current_date = pd.Timestamp.today().normalize()
@@ -110,31 +192,6 @@ def get_latest_position(team_name):
 
     club_stats = get_club_stats(team_name)
     return club_stats['avg_position']
-
-def get_club_stats(club_name):
-    query = """
-        SELECT
-            AVG(attendance) AS avg_attendance,
-            AVG(CASE WHEN home_club_name = ? THEN home_club_position
-                     WHEN away_club_name = ? THEN away_club_position ELSE NULL END) AS avg_position,
-            (SELECT COUNT(*) * 1.0 / COUNT(DISTINCT game_id)
-             FROM game_events
-             WHERE type = 'Cards' AND club_id IN (
-                 SELECT DISTINCT home_club_id FROM games WHERE home_club_name = ?
-                 UNION
-                 SELECT DISTINCT away_club_id FROM games WHERE away_club_name = ?
-             )) AS avg_cards
-        FROM games
-        WHERE home_club_name = ? OR away_club_name = ?
-    """
-    df = pd.read_sql_query(query, conn, params=(club_name, club_name, club_name, club_name, club_name, club_name))
-    if df.empty or df['avg_attendance'].isna().all():
-        return {'avg_attendance': 35000, 'avg_position': 10, 'avg_cards': 2.1}
-    return {
-        'avg_attendance': df['avg_attendance'].iloc[0] or 35000,
-        'avg_position': df['avg_position'].iloc[0] or 10,
-        'avg_cards': df['avg_cards'].iloc[0] or 2.1
-    }
 
 def calculate_form_last5(club_id, is_home):
     """
@@ -251,22 +308,13 @@ class AutocompleteCombobox(ttk.Combobox):
         elif len(event.keysym) == 1:
             self.autocomplete()
 
-# Load models and database connection
-events_model = joblib.load('events_outcome_model.pkl')
+
 #model = joblib.load("match_outcome_model_v2.pkl")
 
 # Get list of available models (excluding events model)
 script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
 pkl_files = [f for f in os.listdir(script_dir) 
             if f.endswith('.pkl') and f != 'events_outcome_model.pkl']
-
-if not pkl_files:
-    messagebox.showerror("Error", "No model files (.pkl) found in directory!")
-    sys.exit()
-
-with open('feature_names.json') as f:
-    feature_order = json.load(f)
-conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
 
 def get_avg_cards_per_referee(ref_name):
     query = """
@@ -337,9 +385,10 @@ teams = sorted(clubs_df['name'].dropna().unique().tolist())
 referees = sorted(games_df['referee'].dropna().unique().tolist())
 venues = sorted(clubs_df['stadium_name'].dropna().unique().tolist())
 
+splash.destroy()  # <-- Kill splash !
 # Create main window
 root = tk.Tk()
-root.title("Match Outcome Predictor")
+root.title("VARIO Engine v0.54")
 root.geometry("600x700")  # Increased height for new dropdowns
 root.configure(bg="#f9f9f9")
 
@@ -351,7 +400,7 @@ model_combo = ttk.Combobox(root, textvariable=model_var,
 model_combo.pack()
 
 # Set default model
-default_model = "match_outcome_model_v2.pkl" if "match_outcome_model_v2.pkl" in pkl_files else pkl_files[0]
+default_model = "footpredict/models/match_outcome_model_v2.pkl" if "footpredict/models/match_outcome_model_v2.pkl" in pkl_files else pkl_files[0]
 model_var.set(default_model)
 
 # Country and League Selectors
@@ -499,8 +548,8 @@ def predict():
             'nationals_diff': nationals_diff,           
             'seats_diff': seats_diff,
             'value_diff': value_diff,
-            'form_x_position_home': form_x_position_home,
-            'form_x_position_away': form_x_position_away,
+            #'form_x_position_home': form_x_position_home,
+            #'form_x_position_away': form_x_position_away,
             'home_gk_clean_sheets_last5': home_gk_clean_sheets,
             'away_gk_clean_sheets_last5': away_gk_clean_sheets,
             'total_value_home': home_team_value,

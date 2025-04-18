@@ -10,6 +10,7 @@ from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import StratifiedKFold
 from imblearn.over_sampling import ADASYN
@@ -18,6 +19,7 @@ import matplotlib.pyplot as plt
 import joblib
 import time
 import os
+import shap
 from tqdm import tqdm
 
 # Suppress unnecessary warnings
@@ -208,7 +210,7 @@ sorted_games['away_goal_diff'] = sorted_games['away_club_goals'] - sorted_games[
 # Club metadata
 step_progress("Step 6: Final data preprocessing and feature engineering")
 
-# Merge club data
+# BIG MERGE HERE
 games = games.merge(clubs.add_prefix("home_"), left_on="home_club_id", right_on="home_club_id", how="left")
 games = games.merge(clubs.add_prefix("away_"), left_on="away_club_id", right_on="away_club_id", how="left")
 
@@ -233,11 +235,25 @@ games["clean_sheets_diff"] = games["home_gk_clean_sheets_last5"] - games["away_g
 games["nationals_diff"] = games["home_national_team_players"] - games["away_national_team_players"]
 games["seats_diff"] = games["home_stadium_seats"] - games["away_stadium_seats"]
 games["value_diff"] = games["total_value_home"] - games["total_value_away"]
-
+games['home_momentum'] = games.groupby('home_club_id')['home_form_last5'].transform(
+    lambda x: x.rolling(3, min_periods=1).mean()
+)
+games['away_momentum'] = games.groupby('away_club_id')['away_form_last5'].transform(
+    lambda x: x.rolling(3, min_periods=1).mean()
+)
+# Add relative strength index
+games['relative_strength'] = (games['home_form_last5'] + 0.1) / (games['away_form_last5'] + 0.1)
 # Create interaction terms
 games["form_x_position_home"] = games['home_form_last5'] * (1/games['home_club_position'].clip(lower=1))  # Avoid division by zero
 games["form_x_position_away"] = games['away_form_last5'] * (1/games['away_club_position'].clip(lower=1))
-
+# Create power ranking from cumulative or rolling average goals
+games['home_power'] = games.groupby('home_club_id')['home_club_goals'].transform(
+    lambda x: x.rolling(window=5, min_periods=1).mean()
+)
+games['away_power'] = games.groupby('away_club_id')['away_club_goals'].transform(
+    lambda x: x.rolling(window=5, min_periods=1).mean()
+)
+games['power_rank_diff'] = games['home_power'] - games['away_power']
 # Ensure numeric positions
 for col in ['home_club_position', 'away_club_position']:
     games[col] = pd.to_numeric(games[col], errors='coerce')
@@ -246,12 +262,11 @@ for col in ['home_club_position', 'away_club_position']:
 features = [
     'position_diff', 'form_diff', 'clean_sheets_diff',
     'home_club_position', 'away_club_position',
-    'formation_strength_diff', 'attendance',
-    'nationals_diff', 'seats_diff', 'value_diff',
     'form_x_position_home', 'form_x_position_away',
     'home_gk_clean_sheets_last5', 'away_gk_clean_sheets_last5',
-    'total_value_home', 'total_value_away'
+    'relative_strength', 'power_rank_diff'
 ]
+
 
 # Validate all features exist before dropping NA
 missing_features = [f for f in features + ["result"] if f not in games.columns]
@@ -291,9 +306,9 @@ X_train, X_test, y_train, y_test = train_test_split(
 # Now apply ADASYN only to training data
 step_progress("Step 8: Applying ADASYN for class balancing")
 adasyn = ADASYN(
-    sampling_strategy={1: int(len(y_train[y_train==1])*1.5)},  # Boost Draws by 50%
+    sampling_strategy={1: int(len(y_train[y_train==1])*2)},  # Double Draws
     random_state=42, 
-    n_neighbors=5
+    n_neighbors=3
 )
 X_resampled, y_resampled = adasyn.fit_resample(X_train, y_train)
 
@@ -302,25 +317,33 @@ print(f"Resampled dataset shapes: {X_resampled.shape}, {y_resampled.shape}")
 # Calculate class weights
 class_weights = compute_sample_weight(class_weight='balanced', y=y_resampled)
 
+def custom_f1_score(preds, dtrain):
+    labels = dtrain.get_label()
+    preds = preds.reshape(3, -1).argmax(axis=0)
+    return 'f1_macro', f1_score(labels, preds, average='macro')
+
 # Enhanced XGBoost configuration
 xgb_model = XGBClassifier(
-    eval_metric='mlogloss',
-    use_label_encoder=False,
-    random_state=42,
+    objective='multi:softprob',
+    eval_metric=custom_f1_score,  # Custom metric
     tree_method='hist',
-    scale_pos_weight=len(y_resampled)/(3*np.bincount(y_resampled)),  # Force class balance
-    reg_lambda=1.5,  # Increased regularization
-    reg_alpha=0.5,
-    max_depth=5,     # Reduced tree depth
-    subsample=0.8,
-    colsample_bytree=0.8
+    scale_pos_weight=compute_class_weight('balanced', classes=np.unique(y), y=y),
+    #reg_lambda=2.0,  # Stronger regularization
+    #max_depth=4,
+    #subsample=0.7,
+    #colsample_bytree=0.7,
+    num_class=3
 )
-
+# Enhanced parameter grid
 param_dist = {
-    'n_estimators': [150, 200],
-    'learning_rate': [0.05, 0.075],
-    'gamma': [0.5, 1],
-    'max_depth': [4, 5],
+    'n_estimators': [150, 200, 250],
+    'learning_rate': [0.01, 0.05, 0.1],
+    'max_depth': [3, 4, 5],
+    'gamma': [0, 0.5, 1],
+    'reg_alpha': [0, 0.5, 1],
+    'reg_lambda': [1, 1.5, 2],
+    'subsample': [0.6, 0.8, 1.0],
+    'colsample_bytree': [0.6, 0.8, 1.0]
 }
 
 # Optimized Random Forest
@@ -402,7 +425,16 @@ sorted_idx = result.importances_mean.argsort()[::-1]
 
 print("\nPermutation Importance:")
 for i in sorted_idx:
-    print(f"{feature_names[i]}: {result.importances_mean[i]:.4f} (±{result.importances_std[i]:.4f})")
+    print(f"{features[i]}: {result.importances_mean[i]:.4f} (±{result.importances_std[i]:.4f})")
+
+# Feature importances (from XGBoost only)
+importances = xgb_search.best_estimator_.feature_importances_
+feature_names = X.columns
+indices = np.argsort(importances)[::-1]
+
+print("Feature importances (from XGBoost):")
+for i in indices:
+    print(f"{feature_names[i]}: {importances[i]:.4f}")
 
 plt.figure(figsize=(10,6))
 plt.title("v2 Feature Importances")
@@ -412,4 +444,59 @@ plt.tight_layout()
 plt.savefig("v2_feature_importance.png")
 plt.close()
 
+# Generate permutation importance plot
+plt.figure(figsize=(12, 8))
+plt.title("v2 Permutation Importances (Mean ± Std Dev)", fontsize=14, pad=20)
 
+# Get the importance values and feature names in sorted order
+importances_mean = result.importances_mean[sorted_idx]
+importances_std = result.importances_std[sorted_idx]
+feature_names_sorted = [features[i] for i in sorted_idx]
+
+# Create the bar plot with error bars
+bars = plt.bar(range(len(importances_mean)), 
+               importances_mean,
+               yerr=importances_std,
+               align='center',
+               color='skyblue',
+               edgecolor='darkblue',
+               capsize=5)
+
+# Add value labels on top of each bar
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2., 
+             height + 0.001,
+             f'{height:.3f}',
+             ha='center', 
+             va='bottom',
+             fontsize=9)
+
+# Format the plot
+plt.xticks(range(len(importances_mean)), 
+           feature_names_sorted, 
+           rotation=45, 
+           ha='right',
+           fontsize=10)
+plt.yticks(fontsize=10)
+plt.ylabel('Importance Score', fontsize=12)
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+
+# Add horizontal space for rotated labels
+plt.tight_layout()
+
+# Save and close
+plt.savefig("v2_permutation_importance.png", dpi=300, bbox_inches='tight')
+plt.close()
+
+print("\nPermutation Importance:")
+for i in sorted_idx:
+    print(f"{features[i]}: {result.importances_mean[i]:.4f} (±{result.importances_std[i]:.4f})")
+
+explainer = shap.TreeExplainer(voting_clf.named_estimators_['xgb'])
+shap_values = explainer.shap_values(X_test)
+
+# Plot feature impacts
+shap.summary_plot(shap_values, X_test, plot_type="bar", class_names=["Home Win", "Draw", "Away Win"])
+plt.savefig("v2_shap_summary.png")
+plt.close()
