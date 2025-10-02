@@ -1,5 +1,3 @@
-# models/v2.py
-
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -13,6 +11,9 @@ from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import StackingClassifier
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import ADASYN
 from imblearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
@@ -30,7 +31,6 @@ tqdm.pandas()
 def step_progress(desc):
     tqdm.write(f"{desc}...")
     time.sleep(0.2)
-
 
 # --- NEW ELO RATING FUNCTIONS ---
 def initialize_elo_ratings(clubs_df, base_rating=1500):
@@ -82,6 +82,15 @@ def calculate_season_elo(games_df, clubs_df, season='2024', base_rating=1500, k_
     return elo_ratings
 
 
+# Suppress unnecessary warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+xgb.set_config(verbosity=0)
+tqdm.pandas()
+
+def step_progress(desc):
+    tqdm.write(f"{desc}...")
+    time.sleep(0.2)
+
 # Load data
 step_progress("Step 1: Loading from DB...")
 conn = sqlite3.connect("/home/magilinux/footpredict/football_data.db")
@@ -91,7 +100,6 @@ valuations = pd.read_sql("SELECT * FROM player_valuations", conn)
 game_lineups = pd.read_sql("SELECT * FROM game_lineups", conn)
 
 games['date'] = pd.to_datetime(games['date'], errors='coerce')
-
 
 # Goalkeeper stats
 step_progress("Step 2: Calculating goalkeeper clean sheets")
@@ -258,10 +266,6 @@ sorted_games = sorted_games[sorted_games['date'] >= current_season_start]
 sorted_games['home_goal_diff'] = sorted_games['home_club_goals'] - sorted_games['away_club_goals']
 sorted_games['away_goal_diff'] = sorted_games['away_club_goals'] - sorted_games['home_club_goals']
 
-# Calculate Elo ratings
-step_progress("Step 5b: Calculating Elo ratings for 2024 season")
-elo_ratings = calculate_season_elo(games, clubs, season='2024')
-
 # Club metadata
 step_progress("Step 6: Final data preprocessing and feature engineering")
 
@@ -284,6 +288,7 @@ def get_match_result(row):
 games["result"] = games.apply(get_match_result, axis=1)
 
 # Calculate all difference features
+# Add Elo ratings to games dataframe
 games['home_elo'] = games['home_club_id'].map(elo_ratings)
 games['away_elo'] = games['away_club_id'].map(elo_ratings)
 games['elo_diff'] = games['home_elo'] - games['away_elo']
@@ -354,7 +359,9 @@ features = [
     'home_club_position', 'away_club_position',
     'form_x_position_home', 'form_x_position_away',
     'home_gk_clean_sheets_last5', 'away_gk_clean_sheets_last5',
-    'relative_strength', 'power_rank_diff', 'win_rate_diff', 'conceded_diff','trend_diff','elo_diff'
+    'relative_strength', 'power_rank_diff', 'win_rate_diff', 
+    'away_conceded', 'home_conceded', 'trend_diff',
+    'home_elo', 'away_elo', 'elo_diff'  # New Elo features
 ]
 
 
@@ -392,38 +399,44 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42, 
     stratify=y
 )
-
-# Now apply ADASYN only to training data
+# Apply ADASYN
 step_progress("Step 8: Applying ADASYN for class balancing")
 adasyn = ADASYN(
-    sampling_strategy={1: int(len(y_train[y_train==1])*2)},  # Double Draws
+    sampling_strategy={1: int(len(y_train[y_train==1])*2)},
     random_state=42, 
     n_neighbors=3
 )
 X_resampled, y_resampled = adasyn.fit_resample(X_train, y_train)
 
-print(f"Resampled dataset shapes: {X_resampled.shape}, {y_resampled.shape}")
+# --- FEATURE SELECTION WITH RFE ---
+step_progress("Step 9: Applying Feature Selection with RFE")
+rfe_estimator = XGBClassifier(
+    objective='multi:softprob',
+    eval_metric='mlogloss',
+    random_state=42,
+    use_label_encoder=False
+)
+selector = RFE(rfe_estimator, n_features_to_select=10, step=1)  # Keep top 10 features
+X_resampled_selected = selector.fit_transform(X_resampled, y_resampled)
+X_test_selected = selector.transform(X_test)
 
-# Calculate class weights
-class_weights = compute_sample_weight(class_weight='balanced', y=y_resampled)
+# Update feature list to selected features
+selected_features = X.columns[selector.support_]
+print(f"Selected features: {selected_features.tolist()}")
 
-def custom_f1_score(preds, dtrain):
-    labels = dtrain.get_label()
-    preds = preds.reshape(3, -1).argmax(axis=0)
-    return 'f1_macro', f1_score(labels, preds, average='macro')
-# Enhanced XGBoost configuration
+# Redefine training/test sets with selected features
+X_resampled = pd.DataFrame(X_resampled_selected, columns=selected_features)
+X_test = pd.DataFrame(X_test_selected, columns=selected_features)
+
+# --- HYPERPARAMETER TUNING (XGBOOST) ---
+step_progress("Step 10: Tuning XGBoost with RandomizedSearchCV")
 xgb_model = XGBClassifier(
     objective='multi:softprob',
-    eval_metric=custom_f1_score,  # Custom metric
-    tree_method='hist',
-    scale_pos_weight=compute_class_weight('balanced', classes=np.unique(y), y=y),
-    #reg_lambda=2.0,  # Stronger regularization
-    #max_depth=4,
-    #subsample=0.7,
-    #colsample_bytree=0.7,
-    num_class=3
+    eval_metric='mlogloss',
+    random_state=42,
+    use_label_encoder=False
 )
-# Enhanced parameter grid
+
 param_dist = {
     'n_estimators': [150, 200, 250],
     'learning_rate': [0.01, 0.05, 0.1],
@@ -435,48 +448,55 @@ param_dist = {
     'colsample_bytree': [0.6, 0.8, 1.0]
 }
 
-# Optimized Random Forest
-rf_model = RandomForestClassifier(
-    n_estimators=500,
-    max_depth=8,
-    max_features='sqrt',
-    class_weight='balanced_subsample',
-    min_samples_leaf=10,
-    random_state=42
-)
-
-
-
-# Enhanced RandomizedSearch
 xgb_search = RandomizedSearchCV(
     estimator=xgb_model,
-    param_distributions={'xgb__'+k: v for k,v in param_dist.items()},
+    param_distributions=param_dist,
     n_iter=8,
     scoring='f1_macro',
     cv=StratifiedKFold(n_splits=3, shuffle=True, random_state=42),
-    verbose=1,
-    n_jobs=1,
+    verbose=0,
+    n_jobs=-1,
     random_state=42
 )
 
-# Fit with resampled data
-xgb_search.fit(X_resampled, y_resampled, sample_weight=class_weights)
+xgb_search.fit(X_resampled, y_resampled)
+print(f"Best XGBoost params: {xgb_search.best_params_}")
 
-# Combine in Voting Classifier
-voting_clf = VotingClassifier(
-    estimators=[
-        ('xgb', xgb_search.best_estimator_),
-        ('rf', rf_model)
-    ],
-    voting='soft'
+# --- STACKING CLASSIFIER ---
+step_progress("Step 11: Training Stacking Classifier")
+xgb_tuned = XGBClassifier(
+    **xgb_search.best_params_,
+    objective='multi:softprob',
+    eval_metric='mlogloss',
+    random_state=42,
+    verbosity=0
 )
 
-# Fit using the same training data
-voting_clf.fit(X_train, y_train)
+rf_model = RandomForestClassifier(
+    n_estimators=500,
+    max_depth=8,
+    class_weight='balanced_subsample',
+    random_state=42
+)
 
-# Predict & Evaluate
-y_pred = voting_clf.predict(X_test)
-print("Classification Report:")
+stacking_clf = StackingClassifier(
+    estimators=[
+        ('xgb', xgb_tuned),
+        ('rf', rf_model)
+    ],
+    final_estimator=LogisticRegression(
+        class_weight='balanced',
+        max_iter=1000,
+        random_state=42
+    ),
+    stack_method='auto',
+    n_jobs=-1
+)
+
+stacking_clf.fit(X_resampled, y_resampled)
+
+# --- EVALUATION ---
+y_pred = stacking_clf.predict(X_test)
 print(classification_report(y_test, y_pred, target_names=["Home Win", "Draw", "Away Win"]))
 
 # Define stratified cross-validation
@@ -484,7 +504,7 @@ stratified_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
 
 # Evaluate using resampled training data
 scores = cross_val_score(
-    voting_clf, 
+    stacking_clf, 
     X_resampled, 
     y_resampled, 
     cv=stratified_cv, 
@@ -496,14 +516,14 @@ print(f"Mean Accuracy: {scores.mean():.4f}")
 
 # Save model
 os.makedirs("models", exist_ok=True)
-joblib.dump(voting_clf, "match_outcome_model_v2.pkl")
-print("✅ Model saved to match_outcome_model_v2.pkl")
+joblib.dump(stacking_clf, "match_outcome_model_v4.pkl")
+print("✅ Model saved to match_outcome_model_v4.pkl")
 
 # Confusion matrix
 conf_matrix = confusion_matrix(y_test, y_pred)
 disp = ConfusionMatrixDisplay(conf_matrix, display_labels=["Home Win", "Draw", "Away Win"])
 disp.plot()
-plt.savefig("v2_confusion_matrix.png")
+plt.savefig("v4_confusion_matrix.png")
 plt.close()
 
 # Feature importance analysis with permutation importance
@@ -526,16 +546,16 @@ for i in indices:
     print(f"{feature_names[i]}: {importances[i]:.4f}")
 
 plt.figure(figsize=(10,6))
-plt.title("v2 Feature Importances")
+plt.title("v4 Feature Importances")
 plt.bar(range(len(importances)), importances[indices], align="center")
 plt.xticks(range(len(importances)), [feature_names[i] for i in indices], rotation=45)
 plt.tight_layout()
-plt.savefig("v2_feature_importance.png")
+plt.savefig("v4_feature_importance.png")
 plt.close()
 
 # Generate permutation importance plot
 plt.figure(figsize=(12, 8))
-plt.title("v2 Permutation Importances (Mean ± Std Dev)", fontsize=14, pad=20)
+plt.title("v4 Permutation Importances (Mean ± Std Dev)", fontsize=14, pad=20)
 
 # Get the importance values and feature names in sorted order
 importances_mean = result.importances_mean[sorted_idx]
@@ -575,17 +595,17 @@ plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.tight_layout()
 
 # Save and close
-plt.savefig("v2_permutation_importance.png", dpi=300, bbox_inches='tight')
+plt.savefig("v4_permutation_importance.png", dpi=300, bbox_inches='tight')
 plt.close()
 
 print("\nPermutation Importance:")
 for i in sorted_idx:
     print(f"{features[i]}: {result.importances_mean[i]:.4f} (±{result.importances_std[i]:.4f})")
 
-explainer = shap.TreeExplainer(voting_clf.named_estimators_['xgb'])
+explainer = shap.TreeExplainer(stacking_clf.named_estimators_['xgb'])
 shap_values = explainer.shap_values(X_test)
 
 # Plot feature impacts
 shap.summary_plot(shap_values, X_test, plot_type="bar", class_names=["Home Win", "Draw", "Away Win"])
-plt.savefig("v2_shap_summary.png")
+plt.savefig("v4_shap_summary.png")
 plt.close()

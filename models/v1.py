@@ -185,32 +185,32 @@ def get_match_result(row):
     else:
         return 2
 
+# Calculate all difference features
 games["result"] = games.progress_apply(get_match_result, axis=1)
 games["position_diff"] = games["home_club_position"] - games["away_club_position"]
-games["age_diff"] = games["home_average_age"] - games["away_average_age"]
-games["seats_diff"] = games["home_stadium_seats"] - games["away_stadium_seats"]
-games["nationals_diff"] = games["home_national_team_players"] - games["away_national_team_players"]
 games["form_diff"] = games["home_form_last5"] - games["away_form_last5"]
 games["clean_sheets_diff"] = games["home_gk_clean_sheets_last5"] - games["away_gk_clean_sheets_last5"]
-games['value_diff'] = games['total_value_home'] - games['total_value_away']
-games['form_x_position_home'] = games['home_form_last5'] * games['home_club_position']
-games['form_x_position_away'] = games['away_form_last5'] * games['away_club_position']
-games['value_per_age'] = games['value_diff'] / (games['age_diff'] + 1e-5)
+games["nationals_diff"] = games["home_national_team_players"] - games["away_national_team_players"]
+games["seats_diff"] = games["home_stadium_seats"] - games["away_stadium_seats"]
+games["value_diff"] = games["total_value_home"] - games["total_value_away"]
 
+# Create interaction terms
+games["form_x_position_home"] = games['home_form_last5'] * (1/games['home_club_position'].clip(lower=1))  # Avoid division by zero
+games["form_x_position_away"] = games['away_form_last5'] * (1/games['away_club_position'].clip(lower=1))
 
-# Updated feature list
+# Ensure numeric positions
+for col in ['home_club_position', 'away_club_position']:
+    games[col] = pd.to_numeric(games[col], errors='coerce')
+
+# Final feature list
 features = [
-    #'home_squad_size', 'home_average_age',
-    #'away_squad_size', 'away_average_age', 
+    'position_diff', 'form_diff', 'clean_sheets_diff',
     'home_club_position', 'away_club_position',
-    'attendance', 'position_diff',
-    'age_diff', 'nationals_diff', 'seats_diff',
-    'total_value_home', 'total_value_away', 
-    'value_diff','form_diff','clean_sheets_diff',
-    'home_formation_strength', 'away_formation_strength',
-    'formation_strength_diff','form_x_position_home','form_x_position_away','value_per_age'
-    #'home_gk_clean_sheets_last5', 'away_gk_clean_sheets_last5',
-    #'home_form_last5', 'away_form_last5'
+    'formation_strength_diff', 'attendance',
+    'nationals_diff', 'seats_diff', 'value_diff',
+    #'form_x_position_home', 'form_x_position_away',
+    'home_gk_clean_sheets_last5', 'away_gk_clean_sheets_last5',
+    'total_value_home', 'total_value_away'
 ]
 
 for col in ['home_club_position', 'away_club_position']:
@@ -224,7 +224,14 @@ y = games["result"]
 # Train model
 step_progress("Step 7: Training Random Forest model")
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-model = RandomForestClassifier(n_estimators=500, max_depth=10, random_state=42,class_weight='balanced', max_features='log2')
+model = RandomForestClassifier(
+    n_estimators=500,
+    max_depth=8,
+    max_features='sqrt',
+    class_weight='balanced_subsample',
+    min_samples_leaf=10,
+    random_state=42
+)
 model.fit(X_train, y_train)
 
 # Evaluate
