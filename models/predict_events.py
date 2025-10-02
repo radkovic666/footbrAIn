@@ -61,7 +61,7 @@ def predict_event(home_team, away_team, referee):
     ref_cards = get_avg_cards_per_referee(referee)
 
     features_dict = {
-        'attendance': (home['avg_attendance'] + away['avg_attendance']) / 2,
+        #'attendance': (home['avg_attendance'] + away['avg_attendance']) / 2,
         'avg_cards_home': home['avg_cards'],
         'avg_cards_away': away['avg_cards'],
         'home_club_position': home['avg_position'],

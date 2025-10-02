@@ -708,20 +708,22 @@ def predict():
 
         # Input vector for prediction - must match exactly with v2.py features
         X_input = pd.DataFrame([{
-            'position_diff': position_diff,
+            #'position_diff': position_diff,
             'form_diff': form_diff,
             'clean_sheets_diff': clean_sheets_diff,
-            'home_club_position': home_position,
-            'away_club_position': away_position,
+            #'home_club_position': home_position,
+            #'away_club_position': away_position,
             'form_x_position_home': form_x_position_home,
             'form_x_position_away': form_x_position_away,
             'home_gk_clean_sheets_last5': home_gk_clean_sheets,
             'away_gk_clean_sheets_last5': away_gk_clean_sheets,
             'relative_strength': relative_strength,
-            'power_rank_diff': power_rank_diff,
+            #'power_rank_diff': power_rank_diff,
             'win_rate_diff': win_rate_diff,
-            'conceded_diff': conceded_diff,
-            'trend_diff': trend_diff
+            #'conceded_diff': conceded_diff,
+            'away_conceded': away_conceded,
+            'home_conceded': home_conceded,
+            #'trend_diff': trend_diff
         }])
 
         probs = model.predict_proba(X_input)[0]
