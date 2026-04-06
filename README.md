@@ -97,3 +97,19 @@ cd /var/www/footbrain
 ```bash
 git clone https://github.com/yourusername/footbrAIn.git
 ```
+
+# Step 3: Install Python Packages
+```bash
+# Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install core packages
+pip install --upgrade pip
+pip install fastapi uvicorn pandas numpy scikit-learn
+pip install xgboost joblib matplotlib seaborn
+pip install imbalanced-learn sqlalchemy python-multipart
+
+# Optional but recommended
+pip install lightgbm catboost shap
+```
