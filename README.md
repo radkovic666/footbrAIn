@@ -73,7 +73,7 @@ VARIO is an advanced AI-powered football prediction engine that combines machine
 
 ```bash
 # System Requirements
-- Ubuntu 20.04+ / Debian 11+ / Linux Lite 6.6
+- Ubuntu 20.04+ / Debian 11+ / Linux Ubuntu Server
 - Python 3.10+
 - 4GB RAM minimum (8GB recommended)
 - 2GB free disk space
