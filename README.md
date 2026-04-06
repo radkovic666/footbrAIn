@@ -294,7 +294,7 @@ curl http://localhost:5002/api/teams
 ```bash
 curl http://localhost:5002/api/referee/Michael%20Oliver
 ```
-#Response
+# Response
 ```bash
 {
   "total_games": 127,
@@ -304,17 +304,10 @@ curl http://localhost:5002/api/referee/Michael%20Oliver
 }
 ```
 
-#Get Model Information
+# Get Model Information
 ```bash
 curl http://localhost:5002/api/model/info
 ```
-
-🎲 Betting Strategies
-Strategy Comparison
-Strategy	Min EV	Kelly Fraction	Max Stake	Min Home Prob	Min Away Prob	Description
-🛡️ Conservative	8%	15%	3%	50%	40%	Low risk, fewer bets, suitable for beginners
-⚖️ Balanced	5%	25%	5%	45%	35%	Optimal for 70% accuracy model
-⚡ Aggressive	3%	40%	8%	40%	30%	Higher risk, more betting opportunities
 
 # Value Betting Formula
 ```bash
@@ -350,7 +343,7 @@ Minimum 30% probability
 
 Extra caution in strategy selection
 
-📁 Project Structure
+# 📁 Project Structure
 ```bash
 /var/www/footbrain/
 ├── app/
@@ -379,7 +372,7 @@ Extra caution in strategy selection
 ├── requirements.txt             # Python dependencies
 └── README.md                    # This file
 ```
-🧠 How It Works
+# 🧠 How It Works
 Feature Engineering Pipeline
 text
 Raw Data → Feature Engineering → Model Training → Prediction
