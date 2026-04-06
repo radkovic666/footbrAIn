@@ -79,14 +79,14 @@ VARIO is an advanced AI-powered football prediction engine that combines machine
 - 2GB free disk space
 - Internet connection for data download
 ```
-Step 1: Install System Dependencies
+# Step 1: Install System Dependencies
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-dev sqlite3 curl unzip
 sudo apt-get install -y build-essential cmake  # For LightGBM (optional)
 ```
 
-Step 2: Clone and Setup Project
+# Step 2: Clone and Setup Project
 # Create project directory
 ```bash
 sudo mkdir -p /var/www/footbrain
