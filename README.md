@@ -80,15 +80,20 @@ VARIO is an advanced AI-powered football prediction engine that combines machine
 - Internet connection for data download
 ```
 Step 1: Install System Dependencies
+```bash
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-dev sqlite3 curl unzip
 sudo apt-get install -y build-essential cmake  # For LightGBM (optional)
+```
 
 Step 2: Clone and Setup Project
-bash
 # Create project directory
+```bash
 sudo mkdir -p /var/www/footbrain
 cd /var/www/footbrain
+```
 
 # Clone repository (or copy files manually)
-git clone https://github.com/yourusername/vario.git .
+```bash
+git clone https://github.com/yourusername/footbrAIn.git
+```
