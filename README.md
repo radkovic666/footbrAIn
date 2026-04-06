@@ -67,28 +67,28 @@ VARIO is an advanced AI-powered football prediction engine that combines machine
 
 ---
 
-## 🏗️ System Architecture
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ VARIO System │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ │
-│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │
-│ │ FastAPI │ │ Models │ │ Database │ │
-│ │ Backend │◄──►│ (XGBoost + │◄──►│ (SQLite) │ │
-│ │ :5002 │ │ RandomForest)│ │ 700MB │ │
-│ └──────────────┘ └──────────────┘ └──────────────┘ │
-│ │ │ │ │
-│ ▼ ▼ ▼ │
-│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ │
-│ │ Static │ │ Pipeline │ │ Cron │ │
-│ │ (HTML/ │ │ (Weekly │ │ (Thu │ │
-│ │ PNG) │ │ Training) │ │ 12:00) │ │
-│ └──────────────┘ └──────────────┘ └──────────────┘ │
-│ │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Feature Engineering │ │
-│ ├────────────┬────────────┬────────────┬────────────┬──────────┤ │
-│ │ Form (5M) │ Clean Sheets│ Goal Diff │ Win Rate │ Position │ │
-│ │ Weighted │ Rolling Avg │ Trends │ Momentum │ Similarity│ │
-│ └────────────┴────────────┴────────────┴────────────┴──────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
+## 🚀 Quick Installation
+
+### Prerequisites
+
+```bash
+# System Requirements
+- Ubuntu 20.04+ / Debian 11+ / Linux Lite 6.6
+- Python 3.10+
+- 4GB RAM minimum (8GB recommended)
+- 2GB free disk space
+- Internet connection for data download
+```
+Step 1: Install System Dependencies
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-dev sqlite3 curl unzip
+sudo apt-get install -y build-essential cmake  # For LightGBM (optional)
+
+Step 2: Clone and Setup Project
+bash
+# Create project directory
+sudo mkdir -p /var/www/footbrain
+cd /var/www/footbrain
+
+# Clone repository (or copy files manually)
+git clone https://github.com/yourusername/vario.git .
