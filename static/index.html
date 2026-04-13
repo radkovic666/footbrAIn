@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FootbrAIn - AI Football Prediction & Betting Engine</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+
+:root{
+    --bg-main:#070b17;
+    --bg-secondary:#0b1022;
+    --bg-tertiary:#10182e;
+    --primary-green:#19e28f;
+    --primary-green-2:#00ff88;
+    --primary-dark:#08101f;
+    --accent-red:#ff5f6d;
+    --accent-orange:#ffb648;
+    --accent-blue:#4ea1ff;
+    --accent-gold:#ffd76a;
+    --text-light:#f5f8ff;
+    --text-muted:#98a6c7;
+    --text-dim:#6f7b98;
+    --card-bg:rgba(14,19,38,.94);
+    --card-bg-soft:rgba(10,14,29,.82);
+    --panel-bg:rgba(7,11,23,.92);
+    --line-soft:rgba(255,255,255,.08);
+    --line-mid:rgba(255,255,255,.12);
+    --border-glow:rgba(25,226,143,.22);
+    --gold-glow:rgba(255,215,106,.18);
+    --blue-glow:rgba(78,161,255,.18);
+    --shadow-soft:0 20px 60px rgba(0,0,0,.36);
+    --shadow-card:0 10px 32px rgba(0,0,0,.28);
+    --radius-xl:24px;
+    --radius-lg:18px;
+    --radius-md:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+    font-family:Inter,Segoe UI,Tahoma,Geneva,Verdana,sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(78,161,255,.10), transparent 28%),
+      radial-gradient(circle at top right, rgba(255,215,106,.08), transparent 22%),
+      linear-gradient(145deg, #070b17 0%, #0b1022 45%, #08101f 100%);
+    color:var(--text-light);
+    min-height:100vh;
+}
+body::before{
+    content:'';
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+    background-size:28px 28px;
+    mask-image:linear-gradient(to bottom, rgba(0,0,0,.20), transparent 70%);
+}
+.header{
+    background:rgba(7,11,23,.88);
+    backdrop-filter:blur(18px);
+    padding:1rem 1.25rem;
+    border-bottom:1px solid var(--line-mid);
+    box-shadow:0 8px 30px rgba(0,0,0,.28);
+    position:sticky;
+    top:0;
+    z-index:100;
+    transition:transform .28s ease, box-shadow .28s ease;
+}
+.header.header-hidden{transform:translateY(-115%)}
+.header-content{max-width:1440px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.logo-text h1{
+    font-size:1.9rem;
+    font-weight:900;
+    letter-spacing:.5px;
+    background:linear-gradient(135deg,#ffffff 0%, var(--accent-gold) 28%, var(--primary-green-2) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent
+}
+.logo-text p{
+    font-size:.72rem;
+    color:var(--text-dim);
+    letter-spacing:2.4px;
+    text-transform:uppercase;
+    margin-top:.1rem
+}
+.refresh-btn{
+    background:linear-gradient(145deg, rgba(255,215,106,.10), rgba(25,226,143,.10));
+    border:1px solid rgba(255,255,255,.14);
+    color:var(--text-light);
+    border-radius:50%;
+    width:42px;height:42px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease
+}
+.refresh-btn:hover{transform:translateY(-1px) rotate(20deg);border-color:var(--accent-gold);box-shadow:0 8px 24px rgba(255,215,106,.18)}
+.refresh-btn.hidden{opacity:0;pointer-events:none;transform:translateY(-20px)}
+.container{max-width:1440px;margin:2rem auto;padding:0 1.25rem 2rem}
+.prediction-card{
+    background:linear-gradient(180deg, rgba(16,24,46,.96), rgba(10,14,29,.94));
+    backdrop-filter:blur(14px);
+    border-radius:var(--radius-xl);
+    padding:1.8rem;
+    margin-bottom:1.4rem;
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:var(--shadow-soft);
+    position:relative;
+    overflow:hidden
+}
+.prediction-card::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:linear-gradient(120deg, transparent, rgba(255,255,255,.02), transparent 55%);
+}
+.card-title{
+    font-size:1.38rem;
+    margin-bottom:1.2rem;
+    font-weight:800;
+    display:flex;align-items:center;gap:.8rem
+}
+.card-title::before{
+    content:'';
+    width:4px;height:24px;
+    background:linear-gradient(180deg, var(--accent-gold), var(--primary-green-2));
+    border-radius:999px
+}
+.section-kicker{
+    font-size:.75rem;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--text-dim);
+    margin-bottom:.8rem
+}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-bottom:1rem}
+.form-group{display:flex;flex-direction:column;gap:.45rem}
+.form-group label{font-weight:700;color:#e8ecf8;font-size:.9rem}
+.search-wrapper{position:relative}
+.search-input,.form-group select,.form-group input{
+    width:100%;
+    padding:.95rem 1rem;
+    border-radius:var(--radius-md);
+    border:1px solid rgba(255,255,255,.10);
+    background:linear-gradient(180deg, rgba(6,10,21,.95), rgba(13,18,35,.92));
+    color:var(--text-light);
+    font-size:.98rem;
+    transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.03)
+}
+.search-input:focus,.form-group select:focus,.form-group input:focus{
+    outline:none;border-color:rgba(255,215,106,.45);
+    box-shadow:0 0 0 3px rgba(255,215,106,.10), 0 10px 30px rgba(0,0,0,.18)
+}
+.search-dropdown{
+    position:absolute;top:100%;left:0;right:0;
+    background:rgba(7,11,23,.98);
+    border:1px solid rgba(255,215,106,.25);
+    border-radius:14px;max-height:260px;overflow-y:auto;display:none;margin-top:6px;z-index:1000;
+    box-shadow:0 18px 35px rgba(0,0,0,.36)
+}
+.search-dropdown-item{padding:.9rem 1rem;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)}
+.search-dropdown-item:hover{background:rgba(255,215,106,.08);color:var(--accent-gold)}
+.country-model-strip{
+    display:none;align-items:center;gap:.85rem;
+    background:linear-gradient(135deg, rgba(255,215,106,.10), rgba(78,161,255,.06));
+    border:1px solid rgba(255,215,106,.18);
+    border-radius:16px;padding:1rem 1rem;margin:.15rem 0 1.15rem
+}
+.country-model-strip img{width:28px;height:20px;object-fit:cover;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.country-model-main{font-weight:800}
+.country-model-sub{font-size:.82rem;color:var(--text-muted);margin-top:.2rem}
+.strategy-selector{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:.6rem;margin-bottom:.6rem
+}
+.strategy-btn{
+    padding:.78rem .75rem;border-radius:12px;border:1px solid rgba(255,255,255,.08);
+    background:linear-gradient(180deg, rgba(10,14,29,.95), rgba(18,24,46,.95));
+    color:var(--text-light);cursor:pointer;font-size:.86rem;font-weight:700;transition:.2s ease
+}
+.strategy-btn:hover{border-color:rgba(255,215,106,.24);transform:translateY(-1px)}
+.strategy-btn.active{
+    background:linear-gradient(135deg, var(--accent-gold), #f7c947);
+    color:#141821;border-color:transparent;box-shadow:0 10px 28px rgba(255,215,106,.22)
+}
+.predict-btn{
+    background:linear-gradient(135deg, var(--accent-gold), #f0c24e 60%, #ffd76a 100%);
+    color:#141821;border:none;padding:1rem 1.2rem;font-size:1.05rem;font-weight:900;border-radius:999px;cursor:pointer;width:100%;
+    letter-spacing:.2px;transition:transform .2s ease, box-shadow .2s ease
+}
+.predict-btn:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(255,215,106,.22)}
+.predict-btn:disabled{opacity:.6;cursor:not-allowed}
+.results-section{display:none}
+.outcome-badge{
+    text-align:center;padding:1.5rem;border-radius:22px;margin-bottom:1.25rem;font-size:1.9rem;font-weight:900;letter-spacing:.3px;
+    box-shadow:var(--shadow-card)
+}
+.outcome-home-win{background:linear-gradient(135deg,rgba(25,226,143,.18),rgba(25,226,143,.04));border:1px solid rgba(25,226,143,.36);color:var(--primary-green-2)}
+.outcome-draw{background:linear-gradient(135deg,rgba(255,182,72,.18),rgba(255,182,72,.04));border:1px solid rgba(255,182,72,.36);color:var(--accent-orange)}
+.outcome-away-win{background:linear-gradient(135deg,rgba(255,95,109,.18),rgba(255,95,109,.04));border:1px solid rgba(255,95,109,.36);color:var(--accent-red)}
+.confidence-badge{display:inline-block;padding:.28rem .8rem;border-radius:999px;font-size:.75rem;font-weight:800;margin-left:.5rem}
+.confidence-high{background:rgba(25,226,143,.14);color:var(--primary-green-2)}
+.confidence-medium{background:rgba(255,182,72,.14);color:var(--accent-orange)}
+.confidence-low{background:rgba(255,95,109,.14);color:var(--accent-red)}
+.summary-strip,.recent-section,.diagnostics-section,.h2h-section{
+    background:linear-gradient(180deg, rgba(10,14,29,.92), rgba(16,24,46,.92));
+    border-radius:18px;padding:1.15rem;margin:1rem 0;border:1px solid rgba(255,255,255,.08)
+}
+.summary-grid,.recent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
+.summary-tile{
+    background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    border:1px solid rgba(255,255,255,.06);padding:.9rem;border-radius:14px
+}
+.summary-label{font-size:.7rem;color:var(--text-dim);margin-bottom:.28rem;text-transform:uppercase;letter-spacing:.8px}
+.summary-value{font-size:1rem;font-weight:800}
+.team-form-row{display:grid;grid-template-columns:1fr auto 1fr;gap:1rem;align-items:center;margin-bottom:1.1rem}
+.team-card{
+    background:linear-gradient(180deg, rgba(10,14,29,.92), rgba(16,24,46,.92));
+    border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:1rem
+}
+.team-name{font-size:1.08rem;font-weight:800;margin-bottom:.45rem}
+.vs-divider{
+    width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg, rgba(255,215,106,.15), rgba(78,161,255,.08));
+    border:1px solid rgba(255,215,106,.18);font-size:1rem;font-weight:900;color:var(--accent-gold)
+}
+.form-description{font-size:.84rem;color:var(--text-muted);margin-top:.55rem;line-height:1.55}
+.probability-section{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.2rem}
+.prob-item{
+    text-align:center;background:linear-gradient(180deg, rgba(10,14,29,.92), rgba(16,24,46,.92));
+    border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:1rem
+}
+.prob-label{font-size:.82rem;margin-bottom:.55rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px}
+.prob-bar-container{background:rgba(255,255,255,.08);border-radius:999px;height:8px;overflow:hidden;margin-bottom:.7rem}
+.prob-bar{height:100%}.prob-home-bar{background:linear-gradient(90deg, var(--primary-green), #6af5ba)} .prob-draw-bar{background:linear-gradient(90deg, #ffcf75, var(--accent-orange))} .prob-away-bar{background:linear-gradient(90deg, #ff8b95, var(--accent-red))}
+.prob-value{font-size:1.38rem;font-weight:900}
+.form-circles{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:.85rem}
+.form-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.92rem}
+.form-circle-green{background:rgba(25,226,143,.16);border:1px solid rgba(25,226,143,.35);color:var(--primary-green-2)}
+.form-circle-orange{background:rgba(255,182,72,.16);border:1px solid rgba(255,182,72,.35);color:var(--accent-orange)}
+.form-circle-red{background:rgba(255,95,109,.16);border:1px solid rgba(255,95,109,.35);color:var(--accent-red)}
+.recent-table{width:100%;border-collapse:collapse;font-size:.9rem}
+.recent-table th,.recent-table td{padding:.72rem .5rem;border-bottom:1px solid rgba(255,255,255,.06);text-align:left}
+.recent-table th{color:var(--text-dim);font-size:.72rem;text-transform:uppercase;letter-spacing:.8px}
+.badge-result{display:inline-flex;min-width:28px;height:28px;align-items:center;justify-content:center;border-radius:999px;font-weight:800;font-size:.82rem}
+.badge-win{background:rgba(25,226,143,.16);color:var(--primary-green-2)}
+.badge-draw{background:rgba(255,182,72,.16);color:var(--accent-orange)}
+.badge-loss{background:rgba(255,95,109,.16);color:var(--accent-red)}
+.cards-prediction-card,.value-bet-card,.summary-strip,.recent-section,.diagnostics-section{
+    background:linear-gradient(180deg, rgba(10,14,29,.92), rgba(16,24,46,.92));
+    border-radius:18px;padding:1.2rem;margin:1rem 0;border:1px solid rgba(255,255,255,.08)
+}
+.cards-prediction-card{border-color:var(--blue-glow);box-shadow:0 12px 30px rgba(78,161,255,.08)}
+.value-bet-card{border-color:var(--gold-glow);box-shadow:0 12px 30px rgba(255,215,106,.08);position:relative}
+.value-bet-card::after{
+    content:'VALUE EDGE';
+    position:absolute;top:-10px;right:14px;
+    background:linear-gradient(135deg,var(--accent-gold),#f7c947);
+    color:#131720;font-weight:900;font-size:.68rem;letter-spacing:.7px;
+    padding:4px 8px;border-radius:999px;box-shadow:0 8px 18px rgba(255,215,106,.18)
+}
+.cards-title,.value-bet-title{
+    font-size:1.05rem;font-weight:900;margin-bottom:.85rem;
+    display:flex;align-items:center;gap:.55rem;letter-spacing:.2px
+}
+.cards-title{color:var(--accent-blue)}
+.value-bet-title{color:var(--accent-gold)}
+.cards-prob-bar,.mini-bar{
+    background:rgba(255,255,255,.08);
+    border-radius:999px;height:8px;overflow:hidden;margin:.7rem 0
+}
+.cards-prob-fill,.mini-bar-fill{height:100%;border-radius:999px;transition:width .4s ease}
+.cards-prob-fill{background:linear-gradient(90deg, #79bbff, var(--accent-blue))}
+.cards-stats,.bet-stats,.summary-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-top:.8rem
+}
+.cards-stat,.bet-stat,.summary-tile{
+    background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    border:1px solid rgba(255,255,255,.05);padding:.8rem;border-radius:12px
+}
+.cards-stat-label,.bet-stat-label,.summary-label{
+    font-size:.72rem;color:var(--text-dim);margin-bottom:.25rem;text-transform:uppercase;letter-spacing:.6px
+}
+.cards-stat-value,.bet-stat-value,.summary-value{font-size:1rem;font-weight:800}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:.95rem;margin-top:1rem}
+.feature-card{
+    background:linear-gradient(180deg, rgba(10,14,29,.92), rgba(16,24,46,.92));
+    border-radius:16px;padding:1rem;border:1px solid rgba(255,255,255,.08);position:relative
+}
+.feature-card.feature-home{border-color:rgba(25,226,143,.22);box-shadow:inset 0 0 0 1px rgba(25,226,143,.05)}
+.feature-card.feature-draw{border-color:rgba(255,182,72,.22);box-shadow:inset 0 0 0 1px rgba(255,182,72,.05)}
+.feature-card.feature-away{border-color:rgba(255,95,109,.22);box-shadow:inset 0 0 0 1px rgba(255,95,109,.05)}
+.feature-header{display:flex;align-items:center;gap:.65rem;margin-bottom:.7rem}
+.feature-icon{
+    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;
+    background:rgba(255,255,255,.05);color:var(--accent-gold);font-size:.95rem
+}
+.feature-label{font-weight:800;font-size:.98rem}
+.feature-main{
+    color:var(--text-light);font-size:1.03rem;font-weight:800;line-height:1.52;margin-bottom:.72rem
+}
+.feature-main::before,.feature-main::after{content:'"';color:var(--accent-gold)}
+.feature-description{
+    color:var(--text-muted);font-size:.83rem;line-height:1.58;padding-top:.72rem;border-top:1px solid rgba(255,255,255,.06)
+}
+.diagnostics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-top:1rem}
+.diagnostic-card{
+    background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.06);border-radius:16px;overflow:hidden;cursor:pointer;transition:transform .18s ease,border-color .18s ease
+}
+.diagnostic-card:hover{transform:translateY(-2px);border-color:rgba(255,215,106,.25)}
+.diagnostic-thumb{height:160px;background:rgba(255,255,255,.03);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.diagnostic-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.diagnostic-fallback{padding:1rem;color:var(--text-muted);text-align:center;font-size:.86rem;line-height:1.5}
+.diagnostic-body{padding:1rem}
+.diagnostic-title{font-size:1rem;font-weight:700;margin-bottom:.45rem}
+.diagnostic-copy{font-size:.84rem;color:var(--text-muted);line-height:1.55}
+.image-modal{
+    position:fixed;inset:0;background:rgba(4,7,20,.92);z-index:9999;display:none;align-items:center;justify-content:center;padding:2rem
+}
+.image-modal.open{display:flex}
+.image-modal-inner{
+    position:relative;width:min(1200px,96vw);max-height:92vh;background:rgba(10,14,39,.98);border:1px solid rgba(255,215,106,.18);border-radius:20px;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.45)
+}
+.image-modal-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,.06)}
+.image-modal-title{font-weight:700;font-size:1rem}
+.modal-close{
+    border:none;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.07);color:var(--text-light);cursor:pointer;font-size:1rem
+}
+.modal-close:hover{background:rgba(255,95,109,.2);color:#fff}
+.image-modal-body{padding:1rem;max-height:calc(92vh - 72px);overflow:auto}
+.image-modal-body img{width:100%;height:auto;display:block;border-radius:12px;background:rgba(255,255,255,.02)}
+.disclaimer{
+    font-size:.72rem;color:var(--text-dim);text-align:center;margin-top:1rem;padding-top:.85rem;border-top:1px solid rgba(255,255,255,.08);line-height:1.5
+}
+@media(max-width:920px){.recent-grid,.team-form-row,.probability-section{grid-template-columns:1fr}.vs-divider{margin:0 auto}}
+@media(max-width:768px){
+    .container{padding:0 .9rem 1.2rem}
+    .form-grid,.features-grid,.cards-stats,.bet-stats,.summary-grid,.diagnostics-grid,.strategy-selector{grid-template-columns:1fr}
+    .prediction-card{padding:1.15rem}
+    .header{padding:.9rem}
+    .image-modal{padding:1rem}
+    .logo-text h1{font-size:1.4rem}
+    .logo-text p{font-size:.66rem;letter-spacing:1.5px}
+    .refresh-btn{width:38px;height:38px}
+    .country-model-strip{padding:.85rem}
+    .outcome-badge{font-size:1.45rem;padding:1.15rem}
+}
+
+</style>
+</head>
+<body>
+<div class="header" id="mainHeader">
+  <div class="header-content">
+    <div class="logo-text">
+      <h1><i class="fas fa-brain"></i> FootbrAIn</h1>
+      <p>Artificial Intelligence Football Prediction</p>
+    </div>
+    <div style="display:flex; gap:1rem; align-items:center;">
+      <div class="refresh-btn" id="refreshBtn" title="Refresh page"><i class="fas fa-arrow-rotate-right"></i></div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="prediction-card">
+    <div class="card-title"><i class="fas fa-futbol"></i> Match Prediction & Value Betting</div>
+    <div class="section-kicker">Choose the country, teams and details. The correct domestic-league model will be selected automatically when available.</div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label><i class="fas fa-globe"></i> Country / League</label>
+        <select id="countrySelect"><option value="">Select Country...</option></select>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-home"></i> Home Team</label>
+        <div class="search-wrapper">
+          <input type="text" id="homeTeamSearch" class="search-input" placeholder="Type to search home team..." autocomplete="off">
+          <div id="homeTeamDropdown" class="search-dropdown"></div>
+        </div>
+        <select id="homeTeam" style="display:none;"><option value="">Select home team...</option></select>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-car"></i> Away Team</label>
+        <div class="search-wrapper">
+          <input type="text" id="awayTeamSearch" class="search-input" placeholder="Type to search away team..." autocomplete="off">
+          <div id="awayTeamDropdown" class="search-dropdown"></div>
+        </div>
+        <select id="awayTeam" style="display:none;"><option value="">Select away team...</option></select>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-whistle"></i> Referee (Optional)</label>
+        <input type="text" id="referee" list="refereesList" placeholder="Type referee name...">
+        <datalist id="refereesList"></datalist>
+        <div id="refereeInfo" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div id="countryModelStrip" class="country-model-strip">
+      <img id="countryFlag" alt="Country flag" style="display:none;">
+      <div>
+        <div class="country-model-main" id="countryModelMain">League model ready</div>
+        <div class="country-model-sub" id="countryModelSub"></div>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label><i class="fas fa-coins"></i> Bankroll ($)</label>
+        <input type="number" id="bankroll" value="1000" step="100" min="100">
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-chart-line"></i> Betting Strategy</label>
+        <div class="strategy-selector" id="strategySelector">
+          <button class="strategy-btn" data-strategy="conservative"><i class="fas fa-shield-alt"></i> Conservative</button>
+          <button class="strategy-btn active" data-strategy="balanced"><i class="fas fa-balance-scale"></i> Balanced</button>
+          <button class="strategy-btn" data-strategy="aggressive"><i class="fas fa-bolt"></i> Aggressive</button>
+        </div>
+      </div>
+    </div>
+
+    <button class="predict-btn" onclick="makePrediction()"><i class="fas fa-chart-simple"></i> Analyze Match</button>
+  </div>
+
+  <div class="results-section" id="resultsSection">
+    <div class="prediction-card" id="resultsContent"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+let teamsByCountry = {};
+let allTeamsList = [];
+let currentStrategy = 'balanced';
+
+const refreshBtn = document.getElementById('refreshBtn');
+const mainHeader = document.getElementById('mainHeader');
+let lastScrollY = window.pageYOffset || 0;
+
+window.addEventListener('scroll', () => {
+  const st = window.pageYOffset || document.documentElement.scrollTop;
+  if (st > lastScrollY && st > 80) {
+    mainHeader.classList.add('header-hidden');
+  } else {
+    mainHeader.classList.remove('header-hidden');
+  }
+  lastScrollY = Math.max(st, 0);
+});
+refreshBtn.addEventListener('click', () => location.reload());
+
+document.querySelectorAll('.strategy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.strategy-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentStrategy = btn.dataset.strategy;
+  });
+});
+
+function getSelectedCountryMeta() {
+  const country = document.getElementById('countrySelect').value;
+  return teamsByCountry[country] || null;
+}
+
+function normalizeCountryMeta(meta) {
+  if (Array.isArray(meta)) return { teams: meta };
+  return meta || { teams: [] };
+}
+
+async function loadCountries() {
+  const response = await fetch(`${API_BASE}/api/teams/by-country`);
+  const data = await response.json();
+  const raw = data.teams_by_country || {};
+  teamsByCountry = {};
+  allTeamsList = [];
+
+  Object.entries(raw).forEach(([country, meta]) => {
+    const normalized = normalizeCountryMeta(meta);
+    normalized.teams = Array.isArray(normalized.teams) ? normalized.teams : [];
+    teamsByCountry[country] = normalized;
+    allTeamsList.push(...normalized.teams);
+  });
+
+  allTeamsList = [...new Set(allTeamsList)].sort();
+
+  const countrySelect = document.getElementById('countrySelect');
+  countrySelect.innerHTML = '<option value="">Select Country...</option>';
+  Object.keys(teamsByCountry).sort().forEach(country => {
+    const meta = teamsByCountry[country];
+    const acc = meta?.accuracy ? ` (${(meta.accuracy * 100).toFixed(1)}%)` : '';
+    const league = meta?.league_name ? ` · ${meta.league_name}` : '';
+    const option = document.createElement('option');
+    option.value = country;
+    option.textContent = `${country}${league}${acc}`;
+    countrySelect.appendChild(option);
+  });
+}
+
+function updateCountryModelStrip() {
+  const meta = getSelectedCountryMeta();
+  const strip = document.getElementById('countryModelStrip');
+  const flag = document.getElementById('countryFlag');
+  const main = document.getElementById('countryModelMain');
+  const sub = document.getElementById('countryModelSub');
+
+  if (!meta) {
+    strip.style.display = 'none';
+    return;
+  }
+
+  strip.style.display = 'flex';
+  main.textContent = `${meta.league_name || 'Domestic league model'} • ${(Number(meta.accuracy || 0) * 100).toFixed(1)}% accuracy`;
+  sub.textContent = `Model ${meta.model_version || 'v5'}${meta.competition_id ? ` • ${meta.competition_id}` : ''}`;
+
+  if (meta.flag_url) {
+    flag.src = meta.flag_url;
+    flag.style.display = 'block';
+  } else {
+    flag.style.display = 'none';
+    flag.removeAttribute('src');
+  }
+}
+
+function onCountryChange() {
+  const meta = normalizeCountryMeta(getSelectedCountryMeta());
+  const teams = meta?.teams ? [...meta.teams].sort() : [];
+  const homeSelect = document.getElementById('homeTeam');
+  const awaySelect = document.getElementById('awayTeam');
+  const homeSearch = document.getElementById('homeTeamSearch');
+  const awaySearch = document.getElementById('awayTeamSearch');
+
+  homeSelect.innerHTML = '<option value="">Select home team...</option>';
+  awaySelect.innerHTML = '<option value="">Select away team...</option>';
+  teams.forEach(team => {
+    homeSelect.innerHTML += `<option value="${team}">${team}</option>`;
+    awaySelect.innerHTML += `<option value="${team}">${team}</option>`;
+  });
+  homeSearch.value = '';
+  awaySearch.value = '';
+  updateCountryModelStrip();
+}
+
+function setupTeamSearch(inputId, dropdownId, selectId) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  const select = document.getElementById(selectId);
+  input.addEventListener('focus', () => {
+    const meta = normalizeCountryMeta(getSelectedCountryMeta());
+    const teamsToShow = meta?.teams ? meta.teams : allTeamsList;
+    showDropdown(dropdown, teamsToShow.slice(0, 15), input, select);
+  });
+  input.addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    const meta = normalizeCountryMeta(getSelectedCountryMeta());
+    const base = meta?.teams ? meta.teams : allTeamsList;
+    showDropdown(dropdown, base.filter(t => t.toLowerCase().includes(q)).slice(0, 15), input, select);
+  });
+  input.addEventListener('blur', () => setTimeout(() => dropdown.style.display = 'none', 200));
+}
+
+function showDropdown(dropdown, teams, input, select) {
+  if (!teams.length) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = '';
+  teams.forEach(team => {
+    const item = document.createElement('div');
+    item.className = 'search-dropdown-item';
+    item.innerHTML = `<i class="fas fa-futbol"></i> ${team}`;
+    item.onclick = () => {
+      input.value = team;
+      select.value = team;
+      dropdown.style.display = 'none';
+    };
+    dropdown.appendChild(item);
+  });
+  dropdown.style.display = 'block';
+}
+
+async function loadReferees() {
+  const response = await fetch(`${API_BASE}/api/referees`);
+  const data = await response.json();
+  const list = document.getElementById('refereesList');
+  (data.referees || []).forEach(ref => {
+    const option = document.createElement('option');
+    option.value = ref;
+    list.appendChild(option);
+  });
+}
+
+async function loadRefereeStats() {
+  const refereeInput = document.getElementById('referee');
+  const refereeInfo = document.getElementById('refereeInfo');
+  if (!refereeInput.value || refereeInput.value.length < 3) { refereeInfo.style.display = 'none'; return; }
+  try {
+    const response = await fetch(`${API_BASE}/api/referee/${encodeURIComponent(refereeInput.value)}`);
+    const data = await response.json();
+    refereeInfo.innerHTML = data.total_games > 0
+      ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem;"><i class="fas fa-rectangle-list"></i> ${data.total_games} matches on record · ${Number(data.avg_cards || 0).toFixed(1)} average cards per match</div>`
+      : `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem;">No referee card profile found yet.</div>`;
+    refereeInfo.style.display = 'block';
+  } catch {}
+}
+
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func(...args), wait); };
+}
+
+
+
+function classifyResult(result) {
+  if (result === 'W') return 'badge-win';
+  if (result === 'D') return 'badge-draw';
+  return 'badge-loss';
+}
+
+function formatScore(game) {
+  const gf = game?.goals_for, ga = game?.goals_against;
+  return (gf === undefined || ga === undefined || gf === null || ga === null) ? '—' : `${gf}-${ga}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+function buildRecentTable(teamName, games, sideLabel) {
+  const circles = (games || []).map(game => `<div class="form-circle form-circle-${game.result === 'W' ? 'green' : game.result === 'D' ? 'orange' : 'red'}">${game.result || '?'}</div>`).join('');
+  const rows = (games || []).map(game => `<tr><td>${escapeHtml(game.date || '—')}</td><td>${escapeHtml(game.opponent || 'Unknown')}</td><td>${escapeHtml(formatScore(game))}</td><td><span class="badge-result ${classifyResult(game.result)}">${escapeHtml(game.result || '?')}</span></td></tr>`).join('');
+  return `<div class="recent-section"><div style="font-weight:700;font-size:1rem;margin-bottom:.35rem;">${escapeHtml(teamName)} · ${sideLabel}</div><div class="recent-subtitle" style="margin-bottom:.8rem;">Latest 5 played matches in the active season window</div><div class="form-circles" style="margin:0 0 1rem 0;">${circles || '<span class="recent-subtitle">No recent matches available</span>'}</div><div style="overflow:auto;"><table class="recent-table"><thead><tr><th>Date</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead><tbody>${rows || '<tr><td colspan="4" style="color:var(--text-muted);">No recent match data returned by the API.</td></tr>'}</tbody></table></div></div>`;
+}
+
+function buildH2HTable(matches) {
+  const rows = (matches || []).map(game => `<tr><td>${escapeHtml(game.date || '—')}</td><td>${escapeHtml(game.home_team || 'Home')}</td><td>${escapeHtml(game.away_team || 'Away')}</td><td>${escapeHtml(game.score || '—')}</td><td>${escapeHtml(game.result_label || '—')}</td></tr>`).join('');
+  return `<div class="h2h-section"><div class="card-title" style="font-size:1.05rem;margin-bottom:.7rem;"><i class="fas fa-arrows-rotate"></i> Recent H2H matches</div><div class="section-kicker" style="margin-bottom:.8rem;">Latest direct meetings between the selected teams.</div><div style="overflow:auto;"><table class="recent-table"><thead><tr><th>Date</th><th>Home</th><th>Away</th><th>Score</th><th>Result</th></tr></thead><tbody>${rows || '<tr><td colspan="5" style="color:var(--text-muted);">No recent H2H matches found.</td></tr>'}</tbody></table></div></div>`;
+}
+
+function getFeatureMeta(featureName) {
+            const map = {
+                home_elo: {
+                    title: 'Home team rating',
+                    description: 'This looks at the home side’s long-term strength profile built from past results.',
+                    explain: (v) => v >= 1750 ? 'The home side comes in with a very strong rating profile, which usually points to a higher baseline level.' :
+                                    v >= 1650 ? 'The home side carries a solid rating base into the match.' :
+                                    v >= 1550 ? 'The home side’s rating looks fairly average rather than dominant.' :
+                                    'The home side’s rating profile is on the weaker side, so it starts from a lower baseline.'
+                },
+                away_elo: {
+                    title: 'Away team rating',
+                    description: 'This measures the away side’s long-term strength using the same rating system.',
+                    explain: (v) => v >= 1750 ? 'The away team brings a very strong rating profile, which can keep it competitive even on the road.' :
+                                    v >= 1650 ? 'The away team also brings a solid rating base into the match.' :
+                                    v >= 1550 ? 'The away team’s rating looks fairly average overall.' :
+                                    'The away side’s long-term rating profile is more fragile than strong.'
+                },
+                elo_diff: {
+                    title: 'Overall strength gap',
+                    description: 'This compares the two rating profiles directly to see which team starts with the stronger baseline.',
+                    explain: (v) => v > 120 ? 'The overall rating gap clearly points toward the home team.' :
+                                    v > 40 ? 'The home team has a noticeable strength edge, but not a runaway one.' :
+                                    v >= -40 ? 'The ratings are fairly close, so this looks more balanced on paper.' :
+                                    v >= -120 ? 'The away team carries a noticeable strength edge.' :
+                                    'The away side looks clearly stronger in the broader rating picture.'
+                },
+                elo_win_prob: {
+                    title: 'Pre-match rating expectation',
+                    description: 'This is the rating model’s first read before the full system adds form, head-to-head, values, and draw signals.',
+                    explain: (v) => v >= 0.68 ? 'Ratings alone already make the home side look like a strong favourite.' :
+                                    v >= 0.56 ? 'Ratings lean toward the home side, but not enough to make the match feel settled.' :
+                                    v >= 0.44 ? 'Ratings see a competitive game without a huge edge either way.' :
+                                    'Ratings do not give the home side the upper hand here.'
+                },
+                elo_superiority: {
+                    title: 'How strong the rating edge feels',
+                    description: 'This softens very large rating gaps so one number does not overwhelm the rest of the model.',
+                    explain: (v) => v > 0.45 ? 'The home team’s rating edge is meaningful and should be taken seriously.' :
+                                    v > 0.15 ? 'There is some rating support for the home side, but it is not overwhelming.' :
+                                    v >= -0.15 ? 'The rating picture stays fairly balanced.' :
+                                    v >= -0.45 ? 'The away side holds the clearer rating edge.' :
+                                    'The away side’s rating edge is strong enough to matter.'
+                },
+                elo_closeness: {
+                    title: 'How tight the matchup looks',
+                    description: 'This checks whether the teams are close enough in quality for the match to play out more evenly.',
+                    explain: (v) => v >= 0.02 ? 'The two teams are close enough on paper for this to stay competitive.' :
+                                    v >= 0.008 ? 'There is some separation, but not a massive one.' :
+                                    'The ratings suggest a more uneven matchup than a close one.'
+                },
+                home_form10: {
+                    title: 'Home team recent form',
+                    description: 'This looks at how the home side has performed across its latest ten matches in the current season window.',
+                    explain: (v) => v >= 2.1 ? 'The home side’s recent run has been strong and reliable.' :
+                                    v >= 1.5 ? 'The home side arrives in respectable recent form.' :
+                                    v >= 1.0 ? 'The home side’s recent form looks mixed rather than strong.' :
+                                    'The home side’s recent form has been underwhelming.'
+                },
+                form_diff10: {
+                    title: 'Who arrives in better form',
+                    description: 'This compares the teams’ longer recent form runs to see who comes in with more momentum.',
+                    explain: (v) => v > 0.6 ? 'Recent form clearly favours the home side.' :
+                                    v > 0.2 ? 'The home side holds a modest recent-form edge.' :
+                                    v >= -0.2 ? 'Recent form is not heavily separated between the teams.' :
+                                    v >= -0.6 ? 'Recent form leans toward the away side.' :
+                                    'Recent form clearly favours the away side.'
+                },
+                home_win_rate5: {
+                    title: 'Home short-term winning rhythm',
+                    description: 'This checks how often the home side has been turning recent matches into wins.',
+                    explain: (v) => v >= 0.8 ? 'The home side has been winning at a very high rate lately.' :
+                                    v >= 0.5 ? 'The home side’s recent winning rhythm is healthy.' :
+                                    v >= 0.25 ? 'The home side’s recent win rate is mixed.' :
+                                    'The home side has not been winning often in the very short term.'
+                },
+                away_win_rate5: {
+                    title: 'Away short-term winning rhythm',
+                    description: 'This shows how often the away side has been winning in its latest few matches.',
+                    explain: (v) => v >= 0.8 ? 'The away team has been winning at a very high rate lately.' :
+                                    v >= 0.5 ? 'The away team’s recent winning rhythm is strong.' :
+                                    v >= 0.25 ? 'The away team’s recent win rate is mixed.' :
+                                    'The away team has not been winning often lately.'
+                },
+                home_win_rate10: {
+                    title: 'Home longer recent consistency',
+                    description: 'This uses a wider ten-match view to judge whether the home side has been consistently strong.',
+                    explain: (v) => v >= 0.65 ? 'Over a longer run, the home side has been consistently winning.' :
+                                    v >= 0.45 ? 'The home side’s longer recent results are reasonably solid.' :
+                                    v >= 0.25 ? 'The home side’s longer recent results look balanced or mixed.' :
+                                    'The home side’s longer recent results have been weak.'
+                },
+                away_win_rate10: {
+                    title: 'Away longer recent consistency',
+                    description: 'This is the away side’s ten-match winning profile rather than just its very latest run.',
+                    explain: (v) => v >= 0.65 ? 'The away side has shown strong longer-run consistency.' :
+                                    v >= 0.45 ? 'The away side’s longer recent results are solid.' :
+                                    v >= 0.25 ? 'The away side’s longer recent results look mixed.' :
+                                    'The away side’s longer recent results have been weak.'
+                },
+                win_rate_diff5: {
+                    title: 'Short-term momentum gap',
+                    description: 'This compares the teams’ last-five winning rhythm to see who has the sharper recent edge.',
+                    explain: (v) => v > 0.35 ? 'Short-term momentum clearly points toward the home side.' :
+                                    v > 0.12 ? 'The home side has a mild short-term edge.' :
+                                    v >= -0.12 ? 'Short-term winning momentum looks fairly even.' :
+                                    v >= -0.35 ? 'Short-term momentum leans toward the away side.' :
+                                    'Short-term momentum clearly favours the away side.'
+                },
+                win_rate_diff10: {
+                    title: 'Longer recent momentum gap',
+                    description: 'This is the same idea as short-term momentum, but over a broader ten-match sample.',
+                    explain: (v) => v > 0.35 ? 'The longer recent profile clearly supports the home side.' :
+                                    v > 0.12 ? 'The longer recent profile leans toward the home side.' :
+                                    v >= -0.12 ? 'The longer recent profile looks fairly balanced.' :
+                                    v >= -0.35 ? 'The longer recent profile leans toward the away side.' :
+                                    'The longer recent profile clearly favours the away side.'
+                },
+                home_gd10: {
+                    title: 'Home team goal trend',
+                    description: 'This checks whether the home side has been outscoring opponents or being outscored over the recent run.',
+                    explain: (v) => v >= 0.8 ? 'The home side has been winning its goal battle quite comfortably.' :
+                                    v >= 0.2 ? 'The home side’s goal trend is mildly positive.' :
+                                    v >= -0.2 ? 'The home side’s goal trend is fairly neutral.' :
+                                    'The home side has been getting outscored over the recent run.'
+                },
+                away_gd10: {
+                    title: 'Away team goal trend',
+                    description: 'This gives the same goal-difference view for the away side.',
+                    explain: (v) => v >= 0.8 ? 'The away side has been controlling the goal battle well.' :
+                                    v >= 0.2 ? 'The away side’s goal trend is positive.' :
+                                    v >= -0.2 ? 'The away side’s goal trend is fairly neutral.' :
+                                    'The away side has been getting outscored over the recent run.'
+                },
+                gd_diff10: {
+                    title: 'Recent goal balance between the teams',
+                    description: 'This compares the teams’ recent goal-difference trends to see who has looked more convincing.',
+                    explain: (v) => v > 0.5 ? 'Recent goal trends point toward the home side.' :
+                                    v > 0.15 ? 'The home side has the slightly better recent goal profile.' :
+                                    v >= -0.15 ? 'Recent goal trends are not heavily one-sided.' :
+                                    v >= -0.5 ? 'The away side has the slightly better recent goal profile.' :
+                                    'Recent goal trends clearly favour the away side.'
+                },
+                attack_def_diff: {
+                    title: 'Attack versus defence matchup',
+                    description: 'This cross-checks one team’s scoring profile against the other team’s defensive profile.',
+                    explain: (v) => v > 0.45 ? 'The home team’s attacking setup looks more likely to create the better openings.' :
+                                    v > 0.12 ? 'The home side holds a modest attack-versus-defence edge.' :
+                                    v >= -0.12 ? 'The matchup looks fairly balanced between attack and defence.' :
+                                    v >= -0.45 ? 'The away side holds the slightly cleaner matchup.' :
+                                    'The away side’s attack-versus-defence setup looks stronger.'
+                },
+                home_scored_std5: {
+                    title: 'How stable the home attack has been',
+                    description: 'This measures whether the home side’s scoring output has been steady or erratic in the short term.',
+                    explain: (v) => v < 0.7 ? 'The home side’s scoring output has been steady and predictable.' :
+                                    v < 1.2 ? 'The home side’s scoring output has been fairly stable.' :
+                                    'The home side’s scoring output has been more volatile than stable.'
+                },
+                home_draw_rate10: {
+                    title: 'Home draw tendency',
+                    description: 'This checks how often the home team has drifted into draws over a wider recent sample.',
+                    explain: (v) => v >= 0.35 ? 'The home side has shown a noticeable draw tendency.' :
+                                    v >= 0.18 ? 'The home side has some draw tendency, but not an extreme one.' :
+                                    'The home side does not show a particularly strong draw pattern.'
+                },
+                combined_draw_rate: {
+                    title: 'Overall draw tendency',
+                    description: 'This blends the teams’ draw habits to judge whether the match profile leans toward a stalemate.',
+                    explain: (v) => v >= 0.35 ? 'The combined profile supports a draw more than usual.' :
+                                    v >= 0.2 ? 'There is some draw potential in the matchup.' :
+                                    'The draw profile is not especially strong.'
+                },
+                form_closeness: {
+                    title: 'How similar the recent form looks',
+                    description: 'This checks whether the teams are arriving on a similar level rather than one clearly outperforming the other.',
+                    explain: (v) => v >= 2.2 ? 'The teams arrive with very similar recent form, which can keep the match tighter.' :
+                                    v >= 1.2 ? 'Recent form is close enough to make the matchup feel balanced.' :
+                                    'Recent form is separated enough to point away from a truly even setup.'
+                },
+                draw_signal: {
+                    title: 'Overall draw signal',
+                    description: 'This combines closeness and draw-oriented clues into one simple read on stalemate potential.',
+                    explain: (v) => v >= 0.02 ? 'The overall shape of the matchup supports draw danger more than normal.' :
+                                    v >= 0.007 ? 'There is some draw risk in the overall profile.' :
+                                    'The draw signal is weak in the full pre-match picture.'
+                },
+                club_home_win_rate: {
+                    title: 'Home venue comfort',
+                    description: 'This looks at how often the home club tends to convert home matches into wins in this context.',
+                    explain: (v) => v >= 0.55 ? 'The home club usually makes good use of its own ground.' :
+                                    v >= 0.42 ? 'The home venue profile is decent rather than dominant.' :
+                                    'The home venue profile is not especially strong.'
+                },
+                value_ratio: {
+                    title: 'Squad value balance',
+                    description: 'This is a talent proxy based on relative squad value rather than just recent results.',
+                    explain: (v) => v >= 1.5 ? 'The squad-value picture clearly leans toward the home side.' :
+                                    v >= 0.8 ? 'The squad-value gap is not especially large.' :
+                                    v >= 0.6 ? 'The squad-value picture leans toward the away side.' :
+                                    'The talent proxy clearly points toward the away side.'
+                },
+                value_diff_norm: {
+                    title: 'Talent gap in normalized form',
+                    description: 'This keeps big money differences from overpowering the rest of the model while still capturing talent imbalance.',
+                    explain: (v) => v > 0.18 ? 'The talent proxy gives the home side meaningful support.' :
+                                    v > 0.05 ? 'The talent picture leans a little toward the home side.' :
+                                    v >= -0.05 ? 'The talent proxy is fairly neutral here.' :
+                                    v >= -0.18 ? 'The talent picture leans toward the away side.' :
+                                    'The talent proxy strongly supports the away side.'
+                },
+                h2h_home_win_rate: {
+                    title: 'Recent head-to-head pattern',
+                    description: 'This checks whether the current fixture pairing has been tilting one way in recent meetings.',
+                    explain: (v) => v >= 0.65 ? 'Recent head-to-head meetings have favoured the home team.' :
+                                    v >= 0.35 ? 'Recent head-to-head meetings look mixed rather than one-sided.' :
+                                    'Recent head-to-head meetings have not favoured the home team.'
+                },
+                h2h_n: {
+                    title: 'How much head-to-head history exists',
+                    description: 'This shows whether the fixture has enough recent direct meetings to be worth listening to.',
+                    explain: (v) => v >= 5 ? 'There is enough recent head-to-head history for it to be somewhat informative.' :
+                                    v >= 2 ? 'There is a little recent head-to-head history, but not a huge amount.' :
+                                    'There is very little recent head-to-head history, so this factor matters less.'
+                },
+                is_league: {
+                    title: 'Match context',
+                    description: 'This distinguishes regular league conditions from cup-style environments where games can behave differently.',
+                    explain: (v) => v === 1 ? 'This is being treated as a league-context matchup.' : 'This is being treated more like a cup-style or non-league setting.'
+                }
+            };
+            return map[featureName] || {
+                title: prettyFeatureName(featureName),
+                description: 'This is one of the signals the model uses when building its overall pre-match read.',
+                explain: () => 'This factor is part of the model’s picture, but it is best interpreted alongside the other signals rather than on its own.'
+            };
+        }
+
+function prettyFeatureName(name) {
+            return String(name || '')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+function getIconForFeature(featureName) {
+            const icons = {
+                home_elo: 'fa-chess-king',
+                away_elo: 'fa-chess-king',
+                elo_diff: 'fa-scale-balanced',
+                elo_win_prob: 'fa-chart-pie',
+                elo_superiority: 'fa-arrow-trend-up',
+                elo_closeness: 'fa-people-arrows',
+                home_form10: 'fa-wave-square',
+                form_diff10: 'fa-chart-line',
+                home_win_rate5: 'fa-trophy',
+                away_win_rate5: 'fa-trophy',
+                home_win_rate10: 'fa-medal',
+                away_win_rate10: 'fa-medal',
+                win_rate_diff5: 'fa-gauge-high',
+                win_rate_diff10: 'fa-gauge',
+                home_gd10: 'fa-futbol',
+                away_gd10: 'fa-futbol',
+                gd_diff10: 'fa-arrow-right-arrow-left',
+                attack_def_diff: 'fa-crosshairs',
+                home_scored_std5: 'fa-chart-simple',
+                home_draw_rate10: 'fa-handshake',
+                combined_draw_rate: 'fa-handshake-angle',
+                form_closeness: 'fa-link',
+                draw_signal: 'fa-equals',
+                club_home_win_rate: 'fa-house',
+                value_ratio: 'fa-coins',
+                value_diff_norm: 'fa-money-bill-trend-up',
+                h2h_home_win_rate: 'fa-clock-rotate-left',
+                h2h_n: 'fa-list-ol',
+                is_league: 'fa-trophy'
+            };
+            return icons[featureName] || 'fa-chart-simple';
+        }
+
+function getFeatureColorClass(featureName, val) {
+            const drawLean = ['draw_signal','combined_draw_rate','form_closeness','elo_closeness','home_draw_rate10'];
+            const absoluteFeatures = ['home_elo','away_elo','home_form10','home_win_rate5','away_win_rate5','home_win_rate10','away_win_rate10','home_gd10','away_gd10','home_scored_std5','club_home_win_rate','h2h_n','is_league'];
+            if (drawLean.includes(featureName)) return 'feature-draw';
+            if (absoluteFeatures.includes(featureName)) return 'feature-draw';
+            if (isNaN(val)) return 'feature-draw';
+            if (val > 0.1) return 'feature-home';
+            if (val < -0.1) return 'feature-away';
+            return 'feature-draw';
+        }
+
+function buildFeatureCards(featureList) {
+            return `
+                <div class="features-grid">
+                    ${featureList.map(feat => {
+                        const val = typeof feat.value === 'number' ? feat.value : parseFloat(feat.value);
+                        const safeVal = isNaN(val) ? 0 : val;
+                        const meta = getFeatureMeta(feat.name);
+                        return `
+                            <div class="feature-card ${getFeatureColorClass(feat.name, safeVal)}">
+                                <div class="feature-header">
+                                    <span class="feature-icon"><i class="fas ${getIconForFeature(feat.name)}"></i></span>
+                                    <span class="feature-label">${escapeHtml(meta.title)}</span>
+                                </div>
+                                <div class="feature-main">${escapeHtml(meta.explain(safeVal))}</div>
+                                <div class="feature-description">${escapeHtml(meta.description)}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+async function makePrediction() {
+  const homeTeam = document.getElementById('homeTeam').value || document.getElementById('homeTeamSearch').value;
+  const awayTeam = document.getElementById('awayTeam').value || document.getElementById('awayTeamSearch').value;
+  const referee = document.getElementById('referee').value;
+  const bankroll = parseFloat(document.getElementById('bankroll').value) || 1000;
+  const country = document.getElementById('countrySelect').value;
+  const meta = getSelectedCountryMeta();
+
+  if (!homeTeam || !awayTeam) { alert('Please select both home and away teams'); return; }
+  if (homeTeam === awayTeam) { alert('Home and away teams must be different'); return; }
+
+  const btn = document.querySelector('.predict-btn');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+  btn.disabled = true;
+
+  try {
+    const response = await fetch(`${API_BASE}/api/betting/analyze?bankroll=${bankroll}&strategy=${currentStrategy}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        home_team: homeTeam,
+        away_team: awayTeam,
+        referee: referee || null,
+        venue: null,
+        model_version: meta?.model_version || null,
+        country: country || null,
+        competition_id: meta?.competition_id || null
+      })
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    displayResults(data);
+  } catch (error) {
+    alert('Error making prediction: ' + error.message);
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
+
+function displayResults(data) {
+  const resultsSection = document.getElementById('resultsSection');
+  const resultsContent = document.getElementById('resultsContent');
+  if (!data) {
+    resultsContent.innerHTML = '<div class="error">Error: No data received</div>';
+    resultsSection.style.display = 'block';
+    return;
+  }
+
+  const probabilities = data.probabilities || {};
+  const homeProb = probabilities.home_win || 0.33;
+  const drawProb = probabilities.draw || 0.33;
+  const awayProb = probabilities.away_win || 0.33;
+
+  const outcomeClass = data.prediction === 'Home Win' ? 'outcome-home-win' : data.prediction === 'Draw' ? 'outcome-draw' : 'outcome-away-win';
+  const confidenceClass = data.confidence_level === 'High Confidence' ? 'confidence-high' : data.confidence_level === 'Medium Confidence' ? 'confidence-medium' : 'confidence-low';
+  const seasonWindow = data.season_window ? `${escapeHtml(data.season_window.start || '')} → ${escapeHtml(data.season_window.cutoff || '')}` : 'Active season window';
+  const modelAcc = data.model_accuracy ? `${(Number(data.model_accuracy) * 100).toFixed(1)}%` : 'N/A';
+
+  const featureListRaw = (data.feature_explanations && data.feature_explanations.length)
+    ? data.feature_explanations
+    : Object.entries(data.features_used || {}).map(([name, value]) => ({ name, value }));
+
+  const featurePriority = [
+    'elo_diff','elo_win_prob','form_diff10','home_form10',
+    'win_rate_diff10','win_rate_diff5','attack_def_diff','gd_diff10',
+    'combined_draw_rate','draw_signal','form_closeness',
+    'club_home_win_rate','value_ratio','value_diff_norm',
+    'h2h_home_win_rate','h2h_n','is_league',
+    'home_elo','away_elo','elo_superiority','elo_closeness',
+    'home_win_rate5','away_win_rate5','home_win_rate10','away_win_rate10',
+    'home_gd10','away_gd10','home_scored_std5','home_draw_rate10'
+  ];
+
+  const featureMap = new Map(featureListRaw.map(item => [item.name, item]));
+  const featureList = featurePriority.filter(name => featureMap.has(name)).map(name => featureMap.get(name)).slice(0, 18);
+
+  let cardsHtml = '';
+  if (data.cards_prediction) {
+    const base = data.cards_prediction;
+    const prob3Plus = Number(base.probability_3plus || 0);
+    const prob2Plus = Number(base.probability_over_2_5 || (prob3Plus ? Math.min(prob3Plus * 0.92, 0.98) : 0));
+    const refAvg = base.referee_avg_cards ?? 'N/A';
+    const refStyle = base.referee_style || (Number(refAvg) >= 4.2 ? 'Strict' : Number(refAvg) >= 3.2 ? 'Balanced' : 'Lenient');
+    const expectedCards = prob2Plus ? (2.1 + prob2Plus * 2.4).toFixed(1) : 'N/A';
+    let cardsDescription = 'Card risk looks moderate.';
+    if (prob2Plus >= 0.72) cardsDescription = 'This referee profile points toward a busy card count.';
+    else if (prob2Plus >= 0.52) cardsDescription = 'There is a decent chance the match becomes card-heavy.';
+
+    cardsHtml = `
+      <div class="cards-prediction-card">
+        <div class="cards-title"><i class="fas fa-rectangle-list"></i> Cards outlook</div>
+        <div style="font-size:1.28rem; font-weight:800;">${(prob2Plus * 100).toFixed(0)}% chance of a card-heavy match</div>
+        <div class="cards-prob-bar"><div class="cards-prob-fill" style="width:${Math.max(0, Math.min(prob2Plus * 100, 100))}%;"></div></div>
+        <div style="font-size:0.92rem; line-height:1.6; color:var(--text-light);">${cardsDescription} This view leans on the referee profile first, then blends in the teams’ recent card habits.</div>
+        <div class="cards-stats">
+          <div class="cards-stat"><div class="cards-stat-label">Referee profile</div><div class="cards-stat-value">${escapeHtml(refStyle)}</div></div>
+          <div class="cards-stat"><div class="cards-stat-label">Referee average</div><div class="cards-stat-value">${escapeHtml(String(refAvg))}</div></div>
+          <div class="cards-stat"><div class="cards-stat-label">Expected cards</div><div class="cards-stat-value">${escapeHtml(String(expectedCards))}</div></div>
+          <div class="cards-stat"><div class="cards-stat-label">3+ cards chance</div><div class="cards-stat-value">${(prob3Plus * 100).toFixed(0)}%</div></div>
+        </div>
+      </div>
+    `;
+  } else if (data.referee) {
+    cardsHtml = `
+      <div class="cards-prediction-card">
+        <div class="cards-title"><i class="fas fa-rectangle-list"></i> Cards outlook</div>
+        <div style="font-size:0.95rem; line-height:1.6; color:var(--text-muted);">
+          A referee was selected, but no cards prediction payload came back from the API for this match.
+        </div>
+      </div>
+    `;
+  }
+
+  let valueBetHtml = '';
+  const bettingAnalysis = data.betting_analysis || {};
+  if (bettingAnalysis.has_value_bet === true && bettingAnalysis.best_bet) {
+    const best = bettingAnalysis.best_bet;
+    const evPercent = Number(best.expected_value_percent || 0);
+    const confidenceText = evPercent > 15 ? 'High' : evPercent > 8 ? 'Good' : 'Moderate';
+
+    valueBetHtml = `
+      <div class="value-bet-card">
+        <div class="value-bet-title"><i class="fas fa-coins"></i> Value bet view</div>
+        <div style="font-size:1.25rem; font-weight:800;">${escapeHtml(best.outcome_display || 'Unknown')}</div>
+        <div class="bet-stats">
+          <div class="bet-stat"><div class="bet-stat-label">Model probability</div><div class="bet-stat-value">${((best.model_probability || 0) * 100).toFixed(1)}%</div></div>
+          <div class="bet-stat"><div class="bet-stat-label">Estimated odds</div><div class="bet-stat-value">${escapeHtml(String(best.bookmaker_odds || 'N/A'))}</div></div>
+          <div class="bet-stat"><div class="bet-stat-label">Expected value</div><div class="bet-stat-value" style="color:var(--primary-green);">+${evPercent.toFixed(1)}%</div></div>
+          <div class="bet-stat"><div class="bet-stat-label">Suggested stake</div><div class="bet-stat-value">$${escapeHtml(String(best.recommended_stake || 0))}</div></div>
+          <div class="bet-stat"><div class="bet-stat-label">Confidence</div><div class="bet-stat-value">${confidenceText}</div></div>
+        </div>
+        <div class="disclaimer" style="margin-top:0.85rem;">
+          Positive EV only suggests a mathematical edge. It does not guarantee the result.
+        </div>
+      </div>
+    `;
+  } else {
+    const skipReasons = bettingAnalysis.skip_reasons || [];
+    valueBetHtml = `
+      <div class="value-bet-card" style="border-color:rgba(255,90,90,0.22);">
+        <div class="value-bet-title" style="color:var(--accent-red);"><i class="fas fa-ban"></i> No value bet found</div>
+        <div style="font-size:0.95rem; line-height:1.6; color:var(--text-light);">
+          The current probabilities do not clear the edge thresholds for this strategy.
+        </div>
+        ${skipReasons.length ? `<div style="margin-top:0.75rem; color:var(--text-muted); font-size:0.84rem; line-height:1.55;">${skipReasons.map(r => `• ${escapeHtml(r)}`).join('<br>')}</div>` : ''}
+      </div>
+    `;
+  }
+
+  resultsContent.innerHTML = `
+    <div class="outcome-badge ${outcomeClass}">
+      <i class="fas fa-trophy"></i> ${escapeHtml(data.prediction || 'Unknown')}
+      <span class="confidence-badge ${confidenceClass}">${escapeHtml(data.confidence_level || 'Medium Confidence')}</span>
+    </div>
+    <div class="summary-strip">
+      <div class="summary-grid">
+        <div class="summary-tile"><div class="summary-label">Match</div><div class="summary-value">${escapeHtml(data.home_team || 'Home')} vs ${escapeHtml(data.away_team || 'Away')}</div></div>
+        <div class="summary-tile"><div class="summary-label">Country / league</div><div class="summary-value">${escapeHtml(data.country || 'Unknown')} · ${escapeHtml(data.league_name || 'Model')}</div></div>
+        <div class="summary-tile"><div class="summary-label">Model</div><div class="summary-value">${escapeHtml(data.model_version || 'v5')} · ${modelAcc}</div></div>
+        <div class="summary-tile"><div class="summary-label">Season window</div><div class="summary-value">${seasonWindow}</div></div>
+      </div>
+    </div>
+
+    <div class="team-form-row">
+      <div class="team-card">
+        <div class="team-name"><i class="fas fa-home"></i> ${escapeHtml(data.home_team || 'Home')}</div>
+        <div class="form-description">${escapeHtml(data.home_form_description || 'Recent home-side form summary will appear here.')}</div>
+      </div>
+      <div class="vs-divider">VS</div>
+      <div class="team-card">
+        <div class="team-name"><i class="fas fa-car"></i> ${escapeHtml(data.away_team || 'Away')}</div>
+        <div class="form-description">${escapeHtml(data.away_form_description || 'Recent away-side form summary will appear here.')}</div>
+      </div>
+    </div>
+
+    <div class="probability-section">
+      <div class="prob-item"><div class="prob-label"><i class="fas fa-home"></i> Home win</div><div class="prob-bar-container"><div class="prob-bar prob-home-bar" style="width:${homeProb * 100}%"></div></div><div class="prob-value">${(homeProb * 100).toFixed(1)}%</div></div>
+      <div class="prob-item"><div class="prob-label"><i class="fas fa-handshake"></i> Draw</div><div class="prob-bar-container"><div class="prob-bar prob-draw-bar" style="width:${drawProb * 100}%"></div></div><div class="prob-value">${(drawProb * 100).toFixed(1)}%</div></div>
+      <div class="prob-item"><div class="prob-label"><i class="fas fa-car"></i> Away win</div><div class="prob-bar-container"><div class="prob-bar prob-away-bar" style="width:${awayProb * 100}%"></div></div><div class="prob-value">${(awayProb * 100).toFixed(1)}%</div></div>
+    </div>
+
+    ${cardsHtml}
+    ${valueBetHtml}
+
+    <div class="recent-grid">
+      ${buildRecentTable(data.home_team || 'Home team', data.home_form_last5 || [], 'Home recent matches')}
+      ${buildRecentTable(data.away_team || 'Away team', data.away_form_last5 || [], 'Away recent matches')}
+    </div>
+
+    ${buildH2HTable(data.h2h_matches || [])}
+
+    <div style="margin-top:1.6rem;">
+      <div class="card-title" style="font-size:1.1rem; margin-bottom:0.7rem;"><i class="fas fa-microscope"></i> Feature breakdown</div>
+      <div class="section-kicker" style="margin-bottom:0.8rem;">A user-friendly explanation of what the model is seeing, without turning the page into a wall of raw numbers.</div>
+      ${buildFeatureCards(featureList)}
+    </div>
+
+    <div class="disclaimer">
+      FootbrAIn combines long-term team strength, current-season form, matchup balance, and referee context into one pre-match view.
+    </div>
+  `;
+
+  resultsSection.style.display = 'block';
+  resultsSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+
+document.getElementById('countrySelect').addEventListener('change', onCountryChange);
+document.getElementById('referee').addEventListener('input', debounce(loadRefereeStats, 500));
+setupTeamSearch('homeTeamSearch', 'homeTeamDropdown', 'homeTeam');
+setupTeamSearch('awayTeamSearch', 'awayTeamDropdown', 'awayTeam');
+
+
+Promise.all([loadCountries(), loadReferees()]).then(() => {
+  updateCountryModelStrip();
+}).catch(console.error);
+</script>
+</body>
+</html>
